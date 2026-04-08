@@ -205,8 +205,9 @@ class TunnelScorer:
         enm:          ENMResult,
         wt_tunnelling: TunnellingResult,
         beta:         float = DEFAULT_BETA,
-        gamma:        float = 1.0,          # breathing weight
+        gamma:        float = 1.0,
         substrate_hbond_residue_keys: Optional[List] = None,
+        anisotropic_alignment_map: Optional[dict] = None,
         donor_chain:   str = 'A',
         donor_resnum:  int = 1,
         donor_atom:    str = 'CA',
@@ -219,27 +220,46 @@ class TunnelScorer:
         self.wt_kie      = wt_tunnelling.predicted_KIE
         self.beta        = beta
         self.gamma       = gamma
-
-        # Active site atoms (for breathing calculation)
         self.donor_chain    = donor_chain
         self.donor_resnum   = donor_resnum
         self.donor_atom     = donor_atom
         self.acceptor_chain = acceptor_chain
         self.acceptor_resnum = acceptor_resnum
         self.acceptor_atom  = acceptor_atom
-
         self.substrate_hbond_keys = set(substrate_hbond_residue_keys or [])
+        # Anisotropic alignment scores from 2AH1 ANISOU records
+        # Keys: (chain, resnum) → alignment score [0,1]
+        # 1.0 = moves along D-A axis (promoting vibration)
+        # 0.0 = moves perpendicular (not promoting)
+        self.aniso_map = anisotropic_alignment_map or {}
 
     def _dynamic_importance(self, res) -> float:
         bfactor_norm = self.structure.normalised_bfactor(res)
         enm_part     = enm_participation_score(self.enm, res.chain, res.number)
-        base_importance = (
-            0.35 * float(np.clip(bfactor_norm, 0, 2) / 2.0)
-          + 0.65 * enm_part
-        )
-        if (res.chain, res.number) in self.substrate_hbond_keys:
-            base_importance = min(1.0, base_importance * 1.5 + 0.2)
-        return float(np.clip(base_importance, 0.0, 1.0))
+        key = (res.chain, res.number)
+
+        if key in self.aniso_map:
+            # Raw anisotropic alignment score [0,1], neutral=0.5
+            # Rescale so 0.5 → 0, 1.0 → 1.0, 0.0 → -1.0
+            # then combine with ENM as a multiplicative weight
+            aniso_raw   = self.aniso_map[key]
+            aniso_signal = (aniso_raw - 0.5) * 2.0  # [-1, +1]
+            aniso_weight = float(np.clip(0.5 + aniso_signal, 0.0, 1.0))
+            importance = (
+                0.60 * aniso_weight * enm_part
+              + 0.30 * enm_part
+              + 0.10 * float(np.clip(bfactor_norm, 0, 2) / 2.0)
+            )
+        else:
+            # Fallback: ENM + B-factor
+            importance = (
+                0.35 * float(np.clip(bfactor_norm, 0, 2) / 2.0)
+              + 0.65 * enm_part
+            )
+            if key in self.substrate_hbond_keys:
+                importance = min(1.0, importance * 1.5 + 0.2)
+
+        return float(np.clip(importance, 0.0, 1.0))
 
     def score_mutation(
         self,
@@ -288,20 +308,38 @@ class TunnelScorer:
         #    Disrupting H-bonds converts directed motion into thermal noise.
 
         dyn_importance = self._dynamic_importance(residue)
+
+        # ── Part 1: Stiffness change ──────────────────────────────────────────
         rigidity_orig  = AA_RIGIDITY.get(orig_aa, 0.5)
         rigidity_new   = AA_RIGIDITY.get(new_aa,  0.5)
-        delta_rigidity = rigidity_new - rigidity_orig
+        delta_rigidity = rigidity_new - rigidity_orig  # +ve = more rigid
+
+        # Effect: high ENM participation × rigidity change
+        # More rigid = damps promoting vibration = negative delta
+        # More flexible = enhances amplitude = positive delta (if directed)
         stiffness_delta = -dyn_importance * delta_rigidity * 1.5
+
+        # ── Part 2: H-bond disruption ─────────────────────────────────────────
         disruption = 0.0
         if orig_aa in CAN_HBOND:
             disruption = hbond_disruption_magnitude(orig_aa, new_aa)
+
+        # H-bond disruption converts directed flexibility into noise:
+        # It REVERSES the stiffness benefit AND adds its own penalty
         if disruption > 0.0:
+            # If mutation would have made residue more flexible (stiffness_delta > 0),
+            # H-bond loss means that flexibility is now undirected → cancel the benefit
             if stiffness_delta > 0:
                 stiffness_delta = stiffness_delta * (1 - disruption)
+            # Additional penalty for losing directed H-bond coupling
             hbond_penalty = -dyn_importance * disruption * 0.8
         else:
             hbond_penalty = 0.0
+
+        # Total dynamic delta
         dynamic_delta = stiffness_delta + hbond_penalty
+
+        # Small gain when adding H-bond capacity to a non-H-bonding residue
         if new_aa in CAN_HBOND and orig_aa not in CAN_HBOND:
             dynamic_delta += 0.15 * dyn_importance
 

@@ -234,15 +234,35 @@ def run_scan(
         high_part = enm.high_participation_residues(0.75)
         print(f"      {len(high_part)} residues in top 25% promoting vibration participation")
 
-    # ── Identify substrate H-bond partners ───────────────────────────────────
+    # ── Build anisotropic alignment map ──────────────────────────────────────
+    aniso_map = {}
+    aniso_pdb = os.path.join(os.path.dirname(os.path.abspath(pdb_path)), '2AH1.pdb')
+    if os.path.exists(aniso_pdb):
+        try:
+            from anisotropic_bfactor import build_alignment_map
+            raw_map   = build_alignment_map(aniso_pdb, donor_coords, acceptor_coords)
+            aniso_map = raw_map
+            if verbose:
+                t172 = aniso_map.get((a_chain, 172), None)
+                n156 = aniso_map.get((a_chain, 156), None)
+                print(f"      Anisotropic alignment: {len(aniso_map)} residues from 2AH1")
+                if t172 is not None:
+                    print(f"      T172={t172:.3f}  N156={n156:.3f}  L380={aniso_map.get(('A',380),0):.3f}")
+        except Exception as e:
+            if verbose:
+                print(f"      Anisotropic data unavailable: {e}")
+    elif verbose:
+        print(f"      2AH1.pdb not found - skipping anisotropic alignment")
+
+        # ── Identify substrate H-bond partners ───────────────────────────────────
     substrate = s.get_residue(d_chain, d_resnum)
     substrate_hbond_keys = []
     if substrate:
         partners = s.substrate_hbond_partners(substrate, cutoff=3.5)
         substrate_hbond_keys = [(r.chain, r.number) for r in partners]
-    if verbose:
-        print(f"      Substrate H-bond partners: "
-              + ", ".join(str(s.get_residue(*k)) for k in substrate_hbond_keys[:5]))
+        if verbose:
+            print(f"      Substrate H-bond partners: "
+                  + ", ".join(str(s.get_residue(*k)) for k in substrate_hbond_keys[:5]))
 
     # ── Build scorer ─────────────────────────────────────────────────────────
     scorer = TunnelScorer(
@@ -250,6 +270,7 @@ def run_scan(
         beta=beta,
         gamma=1.0,
         substrate_hbond_residue_keys=substrate_hbond_keys,
+        anisotropic_alignment_map=aniso_map,
         donor_chain    =d_chain,
         donor_resnum   =d_resnum,
         donor_atom     =d_atom,
