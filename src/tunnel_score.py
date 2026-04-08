@@ -230,26 +230,15 @@ class TunnelScorer:
 
         self.substrate_hbond_keys = set(substrate_hbond_residue_keys or [])
 
-    def _dynamic_importance(self, res: Residue) -> float:
-        """
-        How important is this residue's dynamics to tunnelling?
-        Range 0-1. Combines B-factor mobility and ENM participation.
-        Substrate H-bond partners get boosted.
-        """
+    def _dynamic_importance(self, res) -> float:
         bfactor_norm = self.structure.normalised_bfactor(res)
-        enm_part     = enm_participation_score(
-                           self.enm, res.chain, res.number)
-
-        # Mobile (high B) + participates in collective motion = promoting vibration
+        enm_part     = enm_participation_score(self.enm, res.chain, res.number)
         base_importance = (
-            0.35 * float(np.clip(bfactor_norm, 0, 2) / 2.0)  # B-factor contribution
-          + 0.65 * enm_part                                    # ENM contribution
+            0.35 * float(np.clip(bfactor_norm, 0, 2) / 2.0)
+          + 0.65 * enm_part
         )
-
-        # Substrate H-bond partners are critical promoting vibration residues
         if (res.chain, res.number) in self.substrate_hbond_keys:
             base_importance = min(1.0, base_importance * 1.5 + 0.2)
-
         return float(np.clip(base_importance, 0.0, 1.0))
 
     def score_mutation(
@@ -280,30 +269,39 @@ class TunnelScorer:
         static_delta = -ALPHA_H * da_change   # positive when D-A shortens
 
         # ── Dynamic component ─────────────────────────────────────────────────
-        dyn_importance = self._dynamic_importance(residue)
-
-        # Part 1: Stiffness contribution (all residues)
-        # ENM-weighted rigidity change captures promoting vibration effects
+        # The promoting vibration (~165 cm⁻¹ in AADH) is a collective normal
+        # mode involving ALL residues near the D-A axis, not just H-bonding ones.
         # Source: Johannissen et al. (2007) FEBS J 278:1701
+        #
+        # Two contributions:
+        #
+        # 1. STIFFNESS CONTRIBUTION (universal — applies to all residues)
+        #    Residues with high ENM participation in the promoting vibration
+        #    affect tunnelling by changing the vibrational stiffness.
+        #    More rigid mutation → damps promoting vibration → hurts tunnelling
+        #    More flexible mutation → enhances vibration amplitude → helps tunnelling
+        #    BUT: flexibility helps ONLY if it's directed (see H-bond below)
+        #
+        # 2. H-BOND DISRUPTION CONTRIBUTION (only for H-bonding residues)
+        #    Polar residues that H-bond to the substrate or to each other
+        #    maintain the directional character of the promoting vibration.
+        #    Disrupting H-bonds converts directed motion into thermal noise.
+
+        dyn_importance = self._dynamic_importance(residue)
         rigidity_orig  = AA_RIGIDITY.get(orig_aa, 0.5)
         rigidity_new   = AA_RIGIDITY.get(new_aa,  0.5)
         delta_rigidity = rigidity_new - rigidity_orig
         stiffness_delta = -dyn_importance * delta_rigidity * 1.5
-
-        # Part 2: H-bond disruption (polar residues only)
         disruption = 0.0
         if orig_aa in CAN_HBOND:
             disruption = hbond_disruption_magnitude(orig_aa, new_aa)
-
         if disruption > 0.0:
             if stiffness_delta > 0:
                 stiffness_delta = stiffness_delta * (1 - disruption)
             hbond_penalty = -dyn_importance * disruption * 0.8
         else:
             hbond_penalty = 0.0
-
         dynamic_delta = stiffness_delta + hbond_penalty
-
         if new_aa in CAN_HBOND and orig_aa not in CAN_HBOND:
             dynamic_delta += 0.15 * dyn_importance
 

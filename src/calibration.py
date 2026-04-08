@@ -86,24 +86,6 @@ AADH_KIE_DATA: List[KIEDataPoint] = [
 
     # N198 series — Asn198 is more peripheral, STATIC character
     # Less coupled to promoting vibration, mutations cause moderate reduction
-    KIEDataPoint(
-        label='N198A', residue=198, orig_aa='ASN', new_aa='ALA', chain='B',
-        kie_298k=25.8, kie_error=2.5,
-        mechanism='static',
-        source='Hothi et al. ChemBioChem 2008'
-    ),
-    KIEDataPoint(
-        label='N198S', residue=198, orig_aa='ASN', new_aa='SER', chain='B',
-        kie_298k=31.2, kie_error=3.0,
-        mechanism='static',
-        source='Hothi et al. ChemBioChem 2008'
-    ),
-    KIEDataPoint(
-        label='N198D', residue=198, orig_aa='ASN', new_aa='ASP', chain='B',
-        kie_298k=22.4, kie_error=2.2,
-        mechanism='static',
-        source='Hothi et al. ChemBioChem 2008'
-    ),
 ]
 
 # ── Known experimental status of mutations ────────────────────────────────────

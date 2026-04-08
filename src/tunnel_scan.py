@@ -240,9 +240,9 @@ def run_scan(
     if substrate:
         partners = s.substrate_hbond_partners(substrate, cutoff=3.5)
         substrate_hbond_keys = [(r.chain, r.number) for r in partners]
-        if verbose:
-            print(f"      Substrate H-bond partners: "
-                  + ", ".join(str(s.get_residue(*k)) for k in substrate_hbond_keys[:5]))
+    if verbose:
+        print(f"      Substrate H-bond partners: "
+              + ", ".join(str(s.get_residue(*k)) for k in substrate_hbond_keys[:5]))
 
     # ── Build scorer ─────────────────────────────────────────────────────────
     scorer = TunnelScorer(
