@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from tunnel_scan import run_scan, download_pdb, AADH_CONFIG
 from report import generate_report, print_quick_summary
+from multi_mutation import print_double_mutant_report
 
 
 def main():
@@ -29,9 +30,9 @@ def main():
     pdb_path = os.path.join(structures_dir, '2AGW.pdb')
 
     if not os.path.exists(pdb_path):
-        print("Downloading 1AX3 (AADH crystal structure)...")
+        print("Downloading 2AGW (AADH crystal structure)...")
         try:
-            pdb_path = download_pdb('1AX3', structures_dir)
+            pdb_path = download_pdb('2AGW', structures_dir)
         except Exception as e:
             print(f"Download failed: {e}")
             print("Please manually download 2AGW.pdb from https://rcsb.org")
@@ -85,6 +86,13 @@ def main():
 
     print(f"\n  Full report saved: {report_path}")
     print("★"*65)
+
+    # ── Step 5: Double mutant predictions ────────────────────────────────────
+    if result.double_mutant_scores:
+        print_double_mutant_report(
+            result.double_mutant_scores,
+            wt_kie=result.wt_kie_predicted
+        )
 
 
 if __name__ == '__main__':

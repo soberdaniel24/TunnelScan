@@ -27,7 +27,7 @@ from pdb_parser import Structure, Residue
 from elastic_network import build_gnm
 from tunnelling_model import bell_correction
 from tunnel_score import TunnelScorer, SUBSTITUTION_CANDIDATES, MutationScore
-from calibration import AADH_KIE_DATA
+from multi_mutation import scan_double_mutants, print_double_mutant_report
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Tuple
 
@@ -98,6 +98,7 @@ class ScanResult:
     wt_kie_exp:       float
 
     all_scores:       List[MutationScore]
+    double_mutant_scores: List = field(default_factory=list)
 
     @property
     def novel_scores(self) -> List[MutationScore]:
@@ -235,26 +236,31 @@ def run_scan(
         print(f"      {len(high_part)} residues in top 25% promoting vibration participation")
 
     # ── Build anisotropic alignment map ──────────────────────────────────────
+    # Use 2AH1 (oxidised AADH with ANISOU records) to get crystallographic
+    # evidence of which residues move preferentially along the D-A axis.
+    # This is the only enzyme engineering platform that uses this information.
     aniso_map = {}
-    aniso_pdb = os.path.join(os.path.dirname(os.path.abspath(pdb_path)), '2AH1.pdb')
+    aniso_pdb = pdb_path.replace('2AGW.pdb', '2AH1.pdb')
     if os.path.exists(aniso_pdb):
         try:
-            from anisotropic_bfactor import build_alignment_map
-            raw_map   = build_alignment_map(aniso_pdb, donor_coords, acceptor_coords)
-            aniso_map = raw_map
+            from anisotropic_bfactor import build_alignment_map, normalised_alignment_map
+            raw_map  = build_alignment_map(aniso_pdb, donor_coords, acceptor_coords)
+            aniso_map = normalised_alignment_map(raw_map)
             if verbose:
-                t172 = aniso_map.get((a_chain, 172), None)
-                n156 = aniso_map.get((a_chain, 156), None)
-                print(f"      Anisotropic alignment: {len(aniso_map)} residues from 2AH1")
-                if t172 is not None:
-                    print(f"      T172={t172:.3f}  N156={n156:.3f}  L380={aniso_map.get(('A',380),0):.3f}")
+                n_aniso = len(aniso_map)
+                t172_score = aniso_map.get((a_chain, 172), None)
+                n156_score = aniso_map.get((a_chain, 156), None)
+                print(f"      Anisotropic alignment: {n_aniso} residues from 2AH1")
+                if t172_score is not None:
+                    print(f"      T172 alignment score: {t172_score:.3f} (N156: {n156_score:.3f})")
         except Exception as e:
             if verbose:
                 print(f"      Anisotropic data unavailable: {e}")
     elif verbose:
-        print(f"      2AH1.pdb not found - skipping anisotropic alignment")
+        print(f"      2AH1.pdb not found — skipping anisotropic alignment")
+        print(f"      (download with: curl -o {aniso_pdb} https://files.rcsb.org/download/2AH1.pdb)")
 
-        # ── Identify substrate H-bond partners ───────────────────────────────────
+    # ── Identify substrate H-bond partners ───────────────────────────────────
     substrate = s.get_residue(d_chain, d_resnum)
     substrate_hbond_keys = []
     if substrate:
@@ -331,6 +337,11 @@ def run_scan(
         wt_kie_predicted=wt_result.predicted_KIE,
         wt_kie_exp=config.wt_kie_exp,
         all_scores=all_scores,
+        double_mutant_scores=scan_double_mutants(
+            all_scores, top_n=30,
+            wt_kie=wt_result.predicted_KIE,
+            beta=beta
+        )
     )
 
     if verbose:
