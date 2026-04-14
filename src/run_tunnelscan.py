@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tunnel_scan import run_scan, download_pdb, AADH_CONFIG
 from report import generate_report, print_quick_summary
 from multi_mutation import print_double_mutant_report
+from temperature_dependence import predict_temperature_dependence, print_temperature_report
 
 
 def main():
@@ -93,6 +94,22 @@ def main():
             result.double_mutant_scores,
             wt_kie=result.wt_kie_predicted
         )
+
+    # ── Step 6: Temperature dependence predictions ────────────────────────
+    top_novel = result.top_enhancing[:15]
+    if top_novel:
+        temp_preds = [
+            predict_temperature_dependence(sc.label, sc.predicted_kie)
+            for sc in top_novel
+        ]
+        # Also add known mutations for validation
+        from calibration import AADH_KIE_DATA
+        for dp in AADH_KIE_DATA:
+            if dp.new_aa != 'WT':
+                temp_preds.append(
+                    predict_temperature_dependence(dp.label, dp.kie_298k)
+                )
+        print_temperature_report(temp_preds)
 
 
 if __name__ == '__main__':

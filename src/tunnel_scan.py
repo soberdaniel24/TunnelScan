@@ -128,6 +128,18 @@ class ScanResult:
         return float(1 - ss_res/ss_tot) if ss_tot > 0 else float('nan')
 
 
+DHFR_CONFIG = ActiveSiteConfig(
+    name='DHFR (E. coli) + NADP+/folate',
+    pdb_id='1RX2',
+    donor=('A', 164, 'C4N'),
+    acceptor=('A', 161, 'C6'),
+    barrier_height_kcal=13.4,
+    imaginary_freq_cm1=1184.0,
+    catalytic_residues=[('A', 161), ('A', 164)],
+    scan_radius=10.0,
+    wt_kie_exp=6.8,
+)
+
 def run_scan(
     pdb_path:   str,
     config:     ActiveSiteConfig,

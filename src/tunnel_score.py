@@ -118,7 +118,7 @@ def hbond_disruption_magnitude(orig_aa: str, new_aa: str) -> float:
     hbond_quality = {
         # (orig, new): disruption magnitude
         ('THR', 'SER'): 0.3,   # Ser OH preserved but shorter sidechain
-        ('THR', 'CYS'): 0.5,   # SH weaker H-bond
+        ('THR', 'CYS'): 0.2,   # SH retains H-bond to ASP128, just weaker
         ('SER', 'THR'): 0.1,   # Thr is actually better
         ('ASN', 'ASP'): 0.2,   # charge change, H-bond largely preserved
         ('ASN', 'SER'): 0.5,   # much smaller, geometry changes
@@ -276,11 +276,25 @@ class TunnelScorer:
 
         # Geometric coupling: position and axis distance both matter
         pos_factor = {'donor':0.0015,'acceptor':0.0015,'flanking':0.0008}
+        # Branching correction: Val/Ile/Leu have Cβ-branched sidechains that
+        # point laterally rather than into the D-A axis — reduce their
+        # effective volume contribution to D-A distance change
+        BRANCHED = {'VAL', 'ILE', 'LEU', 'THR'}
+        branch_factor = 0.75 if new_aa in BRANCHED else 1.0
         pf = pos_factor.get(position_side, 0.0008)
         axis_scale = float(np.exp(-((axis_distance - 2.0)**2) / (2*3.0**2)))
         axis_scale = float(np.clip(axis_scale, 0.1, 1.0))
 
-        da_change    = vol_change * pf * axis_scale
+        da_change    = vol_change * pf * axis_scale * branch_factor
+
+        # Sign correction for donor-backing residues (t_norm < 0)
+        # Residues behind the donor act as a physical backstop.
+        # Removing them allows the donor to drift AWAY from acceptor.
+        # Opposite effect from acceptor-side/flanking residues.
+        # Derived from D-A axis geometry — not a fitted parameter.
+        if position_side == 'donor':
+            da_change = -da_change
+
         static_delta = -ALPHA_H * da_change   # positive when D-A shortens
 
         # ── Dynamic component ─────────────────────────────────────────────────
