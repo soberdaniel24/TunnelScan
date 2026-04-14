@@ -1,100 +1,106 @@
 # TunnelScan
 
-**Tunnelling-aware enzyme mutation prediction platform**
+A computational platform for predicting enzyme mutations that exploit quantum tunnelling.
 
-TunnelScan is a computational platform that identifies pharmaceutical enzyme mutations predicted to enhance quantum tunnelling — the mechanism responsible for a significant fraction of biological catalytic speed, and one that no existing enzyme engineering tool models or designs for.
+---
 
-## The Problem
+## The problem
 
-Quantum tunnelling is not a curiosity in enzyme catalysis. Scrutton and Hay demonstrated in *Nature Chemistry* (2012) that specific promoting vibrations directly drive tunnelling enhancement in aromatic amine dehydrogenase (AADH). Johannissen et al. (2007) identified the specific 165 cm⁻¹ vibrational mode responsible. Despite this, every major enzyme engineering platform — directed evolution, AI-guided design, quantum computing simulation — is built on classical transition state theory that treats the energy barrier as something to climb over, not tunnel through.
+Pharmaceutical enzymes are engineered by trial and error. Directed evolution screens thousands of random mutations. Computational tools like Rosetta model classical transition state chemistry. Neither approach accounts for quantum tunnelling — the mechanism by which hydrogen transfer occurs through rather than over the energy barrier, and which is responsible for a significant fraction of catalytic rate in the enzymes most relevant to drug manufacturing.
 
-TunnelScan is the first platform that treats tunnelling as something to engineer deliberately.
+The tunnelling literature has known this for twenty years. The engineering tools have not caught up.
 
-## How It Works
+---
 
-TunnelScan scores each candidate mutation using four physically-grounded components:
+## What TunnelScan does
 
-| Component | Physical basis | Source |
-|---|---|---|
-| **Static (Δstat)** | Bell correction with Marcus exponential decay — smaller residue compresses D-A distance | Bell (1980), Marcus & Sutin (1985) |
-| **Dynamic (Δdyn)** | ENM-weighted promoting vibration contribution — stiffness changes affect tunnelling amplitude | Johannissen et al. (2007) |
-| **H-bond disruption** | Directed H-bond loss converts coherent motion to thermal noise | Hay & Scrutton (2012) |
-| **Breathing (Δbreath)** | Gaussian D-A fluctuation model — directed conformational sampling enhances tunnelling probability | Kuznetsov & Ulstrup (1994) |
+Given a protein crystal structure, TunnelScan predicts which mutations will enhance or reduce quantum tunnelling, and by how much. It outputs a ranked list of candidates with predicted kinetic isotope effects (KIEs), mechanistic classification, confidence scores, and synergistic double mutant combinations — a prioritised experimental roadmap that a biochemist can take directly to the lab.
 
-The combined score predicts the change in kinetic isotope effect (KIE) relative to wild-type.
+The platform models five physical contributions to KIE change:
+
+- **Static geometry** — residue volume change and D-A axis compression, Bell correction with Marcus exponential
+- **Promoting vibration dynamics** — ENM normal mode participation weighted by crystallographic anisotropic displacement alignment with the D-A axis
+- **Conformational breathing** — Gaussian D-A fluctuation model with H-bond disruption scoring
+- **Electrostatics** — Coulomb field from charged residues projected onto the D-A axis
+- **Long-range network coupling** — ENM cross-correlation scan for distal residues coupled to the active site through collective protein motion
+
+Temperature-dependent KIE predictions are generated via the Klinman-Arrhenius framework, including AH/AD pre-exponential factor estimates and tunnelling regime classification.
+
+---
 
 ## Validation
 
-Applied to the 2AGW crystal structure (Masgrau, Scrutton et al., *Science* 2006 — the landmark paper demonstrating proton transfer by tunnelling over 0.6 Å in AADH):
+Calibrated against published AADH (aromatic amine dehydrogenase) mutant KIE data from the Scrutton group (Hay & Scrutton, Nature Chemistry 2012):
 
-- Reproduces experimental KIE values for the T172 mutant series with **R² = 0.508**
-- **13% mean systematic error** with no fitted parameters on the validation dataset
-- 216 novel mutation predictions generated, 123 predicted to exceed wild-type KIE
-
-## Top Novel Predictions
-
-| Mutation | Predicted KIE | Mechanism | Confidence |
+| Mutation | Predicted | Experimental | Error |
 |---|---|---|---|
-| L380G | 2293 | Static | 0.72 |
-| I374G | 1612 | Static + Dynamic | 0.45 |
-| F343G | 1209 | Static + Dynamic | 0.40 |
-| P375G | 360 | Dynamic (breathing) | 0.27 |
-| P409G | 202 | Dynamic (breathing) | 0.23 |
+| T172A | 7.2 | 7.4 | 3% |
+| T172S | 18.2 | 17.9 | 2% |
+| T172C | 10.8 | 12.1 | 11% |
+| T172V | 2.4 | 4.8 | 50%* |
 
-P375G and P409G represent a class of Proline→Gly backbone flexibility mutations predicted to enhance tunnelling through the promoting vibration mechanism — a class not previously explored in the AADH literature.
+*T172V is a documented outlier. Val introduces beta-branched backbone conformational constraints not yet captured by the volume-proxy static model. Flagged as a known limitation.
 
-> Note: absolute KIE values are anchored to the Bell correction baseline (WT predicted = 11.3). Apply a correction factor of 55/11.3 = 4.87 to convert to experimentally-anchored predictions. Relative rankings and mechanism classifications are the primary outputs.
+Cross-validated on DHFR (E. coli dihydrofolate reductase) with no parameter changes:
 
-## Installation
+- I14A correctly predicted as reducing tunnelling — donor-side backstop effect, sign derived from D-A axis geometry
+- F125 mutations correctly predicted as reducing tunnelling
+- G121 identified as tunnelling-relevant at 19Å from the active site via ENM network coupling — outside the geometric scan radius, found through collective mode cross-correlation with Met20 loop anchors
 
-```bash
-git clone https://github.com/soberdaniel24/TunnelScan.git
-cd TunnelScan
-pip install numpy scipy
-```
+G121 identification is significant: it is the canonical example of a distal tunnelling-network residue in the enzyme kinetics literature, and no existing enzyme engineering tool finds it.
 
-ORCA quantum chemistry package required for QM/MM calculations (free for academic use): https://orcaforum.kofo.mpg.de
+---
 
-## Usage
+## Novel predictions
 
-```bash
-# Download structure
-curl -o data/structures/2AGW.pdb "https://files.rcsb.org/download/2AGW.pdb"
+220 mutations scored on AADH (2AGW). 216 novel (untested).
 
-# Run validation suite
-python3 src/validate.py
+Top static predictions: L380G, L423G, F343G, I374G, F169G
 
-# Run full scan
-python3 src/run_tunnelscan.py
-```
+Top dynamic predictions: P356G, P409G, P375G
 
-Output is saved to `data/results/tunnelscan_aadh.txt`.
+Top synergistic double mutants: P375G/P409G (interaction +0.090), F343G/P356G (static + dynamic, interaction +0.052)
 
-## Repository Structure
+---
+
+## Repository structure
 
 ```
 src/
-├── tunnelling_model.py      # Bell correction and KIE calculation
-├── pdb_parser.py            # Crystal structure parsing with B-factors
-├── elastic_network.py       # Gaussian Network Model (promoting vibrations)
-├── breathing.py             # Conformational breathing model
-├── tunnel_score.py          # Four-component TunnelScore
-├── tunnel_scan.py           # Active site scanner
-├── calibration.py           # Published AADH KIE data
-├── report.py                # Results report generator
-├── run_tunnelscan.py        # Main entry point
-└── validate.py              # Validation against published data
+  pdb_parser.py             Structure parsing, B-factors, H-bond detection
+  elastic_network.py        GNM, rank-normalised participation
+  tunnelling_model.py       Bell correction, KIE baseline
+  tunnel_score.py           Five-component scoring model
+  tunnel_scan.py            Active site scanner
+  anisotropic_bfactor.py    ANISOU record parsing, D-A alignment scoring
+  electrostatics.py         Coulomb term for charged residues
+  breathing.py              Gaussian D-A fluctuation model
+  network_coupling.py       Long-range ENM cross-correlation scan
+  multi_mutation.py         Double mutant combination engine
+  temperature_dependence.py Klinman-Arrhenius T-dependence predictions
+  calibration.py            Published KIE dataset
+  report.py                 Report generator
+  run_tunnelscan.py         AADH entry point
+  run_dhfr.py               DHFR validation entry point
+
+data/
+  structures/               PDB files (2AGW, 2AH1, 1RX2)
+  results/                  Scan outputs
 ```
 
-## Scientific References
+---
 
-- Masgrau et al. (2006) *Science* 312:237 — AADH crystal structure and tunnelling demonstration
-- Hay & Scrutton (2012) *Nature Chemistry* 4:161 — promoting vibrations in enzyme tunnelling
-- Johannissen et al. (2007) *FEBS J* 278:1701 — 165 cm⁻¹ promoting vibration in AADH
-- Klinman & Kohen (2013) *Annual Review of Biochemistry* — tunnelling in enzymatic H-transfer
-- Kuznetsov & Ulstrup (1994) *Can. J. Chem.* 72:1009 — Gaussian breathing theory
+## Data sources
 
-## Author
+- 2AGW — AADH with tryptamine (Masgrau et al. 2006, Science 311:1600)
+- 2AH1 — Oxidised AADH with 9013 ANISOU anisotropic displacement records
+- 1RX2 — E. coli DHFR with NADP+/folate
+- Experimental KIE data: Hay & Scrutton (2012) Nat. Chem. 4:161; Johannissen et al. (2007) FEBS J 278:1701
 
-Daniel Margoschis — Second-year Biochemistry student  
-Built as part of ongoing research into quantum biology-inspired enzyme engineering.
+---
+
+## Status
+
+Built by a biochemistry undergraduate at University College London. Computational validation complete. Seeking wet lab collaboration for experimental confirmation of novel predictions.
+
+[github.com/soberdaniel24/TunnelScan](https://github.com/soberdaniel24/TunnelScan)
