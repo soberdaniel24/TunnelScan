@@ -243,9 +243,9 @@ def run_scan(
     aniso_pdb = pdb_path.replace('2AGW.pdb', '2AH1.pdb')
     if os.path.exists(aniso_pdb):
         try:
-            from anisotropic_bfactor import build_alignment_map, normalised_alignment_map
+            from anisotropic_bfactor import build_alignment_map
             raw_map  = build_alignment_map(aniso_pdb, donor_coords, acceptor_coords)
-            aniso_map = normalised_alignment_map(raw_map)
+            aniso_map = raw_map
             if verbose:
                 n_aniso = len(aniso_map)
                 t172_score = aniso_map.get((a_chain, 172), None)

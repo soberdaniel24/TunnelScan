@@ -41,6 +41,7 @@ from elastic_network import ENMResult, enm_participation_score
 from calibration import is_novel_prediction, get_known_kie
 from tunnelling_model import TunnellingResult
 from breathing import compute_breathing_contribution, BreathingResult, AA_RIGIDITY
+from electrostatics import ElectrostaticsMap, build_electrostatics_map
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -163,6 +164,7 @@ class MutationScore:
 
     dominant_mechanism: str     # 'static' | 'dynamic' | 'mixed' | 'breathing'
     breathing_delta:    float   # breathing contribution to ln(KIE)
+    elec_delta:         float   # electrostatic contribution to ln(KIE)
     breathing_mechanism: str    # 'mobilising' | 'rigidifying' | 'neutral'
     is_novel:           bool
     experimental_kie:   Optional[float]
@@ -227,11 +229,8 @@ class TunnelScorer:
         self.acceptor_resnum = acceptor_resnum
         self.acceptor_atom  = acceptor_atom
         self.substrate_hbond_keys = set(substrate_hbond_residue_keys or [])
-        # Anisotropic alignment scores from 2AH1 ANISOU records
-        # Keys: (chain, resnum) → alignment score [0,1]
-        # 1.0 = moves along D-A axis (promoting vibration)
-        # 0.0 = moves perpendicular (not promoting)
         self.aniso_map = anisotropic_alignment_map or {}
+        self.elec_map: Optional[ElectrostaticsMap] = None  # built on first use
 
     def _dynamic_importance(self, res) -> float:
         bfactor_norm = self.structure.normalised_bfactor(res)
@@ -239,14 +238,10 @@ class TunnelScorer:
         key = (res.chain, res.number)
 
         if key in self.aniso_map:
-            # Raw anisotropic alignment score [0,1], neutral=0.5
-            # Rescale so 0.5 → 0, 1.0 → 1.0, 0.0 → -1.0
-            # then combine with ENM as a multiplicative weight
-            aniso_raw   = self.aniso_map[key]
-            aniso_signal = (aniso_raw - 0.5) * 2.0  # [-1, +1]
-            aniso_weight = float(np.clip(0.5 + aniso_signal, 0.0, 1.0))
+            # Crystallographic anisotropic alignment available
+            aniso_align = self.aniso_map[key]
             importance = (
-                0.60 * aniso_weight * enm_part
+                0.60 * aniso_align
               + 0.30 * enm_part
               + 0.10 * float(np.clip(bfactor_norm, 0, 2) / 2.0)
             )
@@ -359,8 +354,33 @@ class TunnelScorer:
         )
         breathing_delta = breath.breathing_delta
 
+        # ── Electrostatic component ───────────────────────────────────────────
+        # Build electrostatics map on first call (lazy init)
+        if self.elec_map is None:
+            d_coords = self.structure.get_atom(
+                self.donor_chain, self.donor_resnum, self.donor_atom)
+            a_coords = self.structure.get_atom(
+                self.acceptor_chain, self.acceptor_resnum, self.acceptor_atom)
+            if d_coords and a_coords:
+                self.elec_map = build_electrostatics_map(
+                    self.structure, d_coords.coords, a_coords.coords
+                )
+            else:
+                self.elec_map = build_electrostatics_map(
+                    self.structure,
+                    np.array([0.0, 0.0, 0.0]),
+                    np.array([0.0, 0.0, 2.87])
+                )
+
+        elec_delta = self.elec_map.get_delta(
+            residue.chain, residue.number, orig_aa, new_aa
+        )
+
         # ── Total prediction ──────────────────────────────────────────────────
-        total_delta   = static_delta + self.beta * dynamic_delta + self.gamma * breathing_delta
+        total_delta   = (static_delta
+                        + self.beta * dynamic_delta
+                        + self.gamma * breathing_delta
+                        + elec_delta)
         ln_kie_pred   = np.log(self.wt_kie) + total_delta
         predicted_kie = float(np.exp(np.clip(ln_kie_pred, 0.0, 8.0)))
         fold_vs_wt    = predicted_kie / self.wt_kie
@@ -374,6 +394,7 @@ class TunnelScorer:
             'static':    abs_static,
             'dynamic':   abs_dynamic,
             'breathing': abs_breathing,
+            'electrostatic': abs(elec_delta),
         }
         dominant = max(components, key=components.get)
         # Only call it dominated if it's clearly largest
@@ -417,6 +438,7 @@ class TunnelScorer:
             confidence=confidence,
             dominant_mechanism=dominant,
             breathing_delta=breathing_delta,
+            elec_delta=elec_delta,
             breathing_mechanism=breath.mechanism,
             is_novel=is_novel_prediction(label),
             experimental_kie=exp_kie,
