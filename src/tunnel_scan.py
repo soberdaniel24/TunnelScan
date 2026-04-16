@@ -27,6 +27,8 @@ from pdb_parser import Structure, Residue
 from elastic_network import build_gnm
 from tunnelling_model import bell_correction
 from tunnel_score import TunnelScorer, SUBSTITUTION_CANDIDATES, MutationScore, DEFAULT_BETA
+from bayesian_uncertainty import add_bayesian_confidence
+from calibration import AADH_KIE_DATA
 from multi_mutation import scan_double_mutants, print_double_mutant_report
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Tuple
@@ -360,6 +362,20 @@ def run_scan(
         cal_r2 = result.calibration_r2
         if not np.isnan(cal_r2):
             print(f"  Calibration R² (known mutations): {cal_r2:.3f}")
+
+    # ── Bayesian uncertainty quantification ───────────────────────────────────
+    # Fitted on T172 calibration series after physics scan; enriches every
+    # MutationScore with a BayesianConfidence object (ms.bayes).
+    try:
+        bayes_model = add_bayesian_confidence(
+            all_scores, AADH_KIE_DATA, float(np.log(wt_result.predicted_KIE)),
+            verbose=verbose,
+        )
+        result.bayes_model = bayes_model
+    except Exception as e:
+        if verbose:
+            print(f"  Bayesian UQ skipped: {e}")
+        result.bayes_model = None
 
     return result
 

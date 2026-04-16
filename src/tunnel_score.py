@@ -53,6 +53,7 @@ from calibration import is_novel_prediction, get_known_kie
 from tunnelling_model import TunnellingResult
 from breathing import compute_breathing_contribution, BreathingResult, AA_RIGIDITY
 from electrostatics import ElectrostaticsMap, build_electrostatics_map
+from bayesian_uncertainty import BayesianConfidence
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -187,6 +188,10 @@ class MutationScore:
     is_novel:           bool
     experimental_kie:   Optional[float]
     prediction_error:   Optional[float]
+
+    # Bayesian uncertainty — populated after scan completes via
+    # bayesian_uncertainty.add_bayesian_confidence(); None until then.
+    bayes: Optional[BayesianConfidence] = None
 
     def priority(self) -> str:
         if self.predicted_kie > 80 and self.is_novel:
