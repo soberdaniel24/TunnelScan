@@ -563,9 +563,12 @@ class TunnelScorer:
         # Total dynamic delta
         dynamic_delta = stiffness_delta + hbond_penalty
 
-        # Small gain when adding H-bond capacity to a non-H-bonding residue
-        if new_aa in CAN_HBOND and orig_aa not in CAN_HBOND:
-            dynamic_delta += 0.15 * dyn_importance
+        # NOTE: no gain bonus for introducing new H-bond capacity.
+        # H-bond disruption is certain (crystal structure proves the contact exists).
+        # H-bond formation is geometrically speculative — the new sidechain needs a
+        # compatible partner, feasible rotamer, and correct orientation relative to
+        # the promoting vibration. Without a geometric check, adding a gain term
+        # introduces systematic noise with no calibration data to constrain it.
 
         # ── Breathing component ───────────────────────────────────────────────
         breath = compute_breathing_contribution(
