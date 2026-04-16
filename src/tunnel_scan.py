@@ -31,6 +31,7 @@ from bayesian_uncertainty import add_bayesian_confidence
 from calibration import AADH_KIE_DATA
 from multi_mutation import scan_double_mutants, print_double_mutant_report
 from stochastic_tunnelling import build_stochastic_model
+from gnn_coupling import build_gnn_model, compute_gnn_residuals_from_scan
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Tuple
 
@@ -380,6 +381,50 @@ def run_scan(
         cal_r2 = result.calibration_r2
         if not np.isnan(cal_r2):
             print(f"  Calibration R² (known mutations): {cal_r2:.3f}")
+
+    # ── GNN residual correction ───────────────────────────────────────────────
+    # Two-pass approach:
+    #   1. Physics scan already complete (all_scores populated)
+    #   2. Extract residuals for known mutations
+    #   3. Fit GNN on those residuals (w_mp, w_out: 4 parameters)
+    #   4. Apply GNN corrections to every MutationScore in-place
+    try:
+        cal_residuals = compute_gnn_residuals_from_scan(all_scores, AADH_KIE_DATA)
+        if cal_residuals:
+            gnn_model = build_gnn_model(
+                s, enm,
+                donor_key    = (d_chain, d_resnum),
+                acceptor_key = (a_chain, a_resnum),
+                donor_coords    = donor_coords,
+                acceptor_coords = acceptor_coords,
+                calibration_residuals = cal_residuals,
+                substrate_hbond_keys  = set(substrate_hbond_keys),
+                verbose = verbose,
+            )
+            # Apply GNN delta to every MutationScore
+            import math
+            for sc in all_scores:
+                gnn_r = gnn_model.predict((sc.chain, sc.residue_number), sc.orig_aa, sc.new_aa)
+                sc.gnn_delta = gnn_r.gnn_delta
+                sc.total_delta += gnn_r.gnn_delta
+                ln_kie = math.log(sc.predicted_kie) + gnn_r.gnn_delta
+                sc.predicted_kie = float(math.exp(min(ln_kie, 8.0)))
+                sc.fold_vs_wt    = sc.predicted_kie / wt_result.predicted_KIE
+                if sc.experimental_kie:
+                    sc.prediction_error = abs(sc.predicted_kie - sc.experimental_kie) / sc.experimental_kie
+            # Re-sort after GNN correction
+            all_scores.sort(key=lambda x: x.predicted_kie, reverse=True)
+            if verbose:
+                cal_r2_post = result.calibration_r2
+                if not np.isnan(cal_r2_post):
+                    print(f"  Calibration R² after GNN: {cal_r2_post:.3f}")
+            result.gnn_model = gnn_model
+        else:
+            result.gnn_model = None
+    except Exception as e:
+        if verbose:
+            print(f"  GNN correction skipped: {e}")
+        result.gnn_model = None
 
     # ── Bayesian uncertainty quantification ───────────────────────────────────
     # Fitted on T172 calibration series after physics scan; enriches every

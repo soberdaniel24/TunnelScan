@@ -179,6 +179,7 @@ class MutationScore:
     breathing_delta:    float   # breathing contribution to ln(KIE)
     elec_delta:         float   # electrostatic contribution to ln(KIE)
     stochastic_delta:   float   # D-A distance sampling correction to ln(KIE)
+    gnn_delta:          float   # graph neural network residual correction
     breathing_mechanism: str    # 'mobilising' | 'rigidifying' | 'neutral'
     is_novel:           bool
     experimental_kie:   Optional[float]
@@ -689,6 +690,7 @@ class TunnelScorer:
             breathing_delta=breathing_delta,
             elec_delta=elec_delta,
             stochastic_delta=stochastic_delta,
+            gnn_delta=0.0,   # populated by apply_gnn_corrections() in tunnel_scan
             breathing_mechanism=breath.mechanism,
             is_novel=is_novel_prediction(label),
             experimental_kie=exp_kie,
