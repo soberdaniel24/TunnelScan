@@ -53,6 +53,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 N_FEATURES   = 6   # number of continuous features per mutation
 MAX_INDUCING = 20  # maximum inducing points (switch to exact GP when N ≤ M)
 
+# LOO cross-validation (T172 series, 4 mutations) yields LOO-R² = 0.622.
+# With n=4 the GP interpolates the training set but cannot generalise reliably.
+# Gate: require at least this many calibration mutations before activating GPR.
+# Rationale: n=8 (2× current) is the minimum where the DTC marginal likelihood
+# can distinguish length scales and noise reliably in a 6D feature space.
+MIN_CALIBRATION_GPR = 8
+
 # Mechanism index mapping
 MECHANISM_IDS: Dict[str, int] = {
     'static':    0,

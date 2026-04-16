@@ -33,7 +33,7 @@ from multi_mutation import scan_double_mutants, print_double_mutant_report
 from stochastic_tunnelling import build_stochastic_model
 from gnn_coupling import build_gnn_model, compute_gnn_residuals_from_scan
 from gp_regression import (build_gpr_model, compute_gpr_residuals_from_scan,
-                            extract_gpr_feature)
+                            extract_gpr_feature, MIN_CALIBRATION_GPR)
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Tuple
 
@@ -433,9 +433,14 @@ def run_scan(
     #   1. Compute post-GNN residuals for known mutations
     #   2. Fit Sparse GP with physics-informed kernel on those residuals
     #   3. Apply GPR corrections + uncertainty bands to every MutationScore
+    #
+    # GATING: LOO cross-validation on the current T172 series (n=4) yields
+    # LOO-R²=0.622 < 0.70 threshold, indicating overfitting with n<8.
+    # GPR is held in reserve until ≥8 calibration mutations are available.
+    # Run src/loo_gpr.py to re-evaluate when new experimental data arrives.
     try:
         gpr_residuals = compute_gpr_residuals_from_scan(all_scores, AADH_KIE_DATA)
-        if gpr_residuals:
+        if len(gpr_residuals) >= MIN_CALIBRATION_GPR:
             gpr_model = build_gpr_model(all_scores, gpr_residuals, verbose=verbose)
             if gpr_model.is_fitted():
                 import math as _math
@@ -460,6 +465,11 @@ def run_scan(
             else:
                 result.gpr_model = None
         else:
+            n_cal = len(gpr_residuals)
+            if verbose:
+                print(f"  GPR gated: n={n_cal} calibration mutations "
+                      f"< {MIN_CALIBRATION_GPR} required "
+                      f"(LOO-R²=0.62 with n=4 — run loo_gpr.py to re-evaluate)")
             result.gpr_model = None
     except Exception as e:
         if verbose:
