@@ -24,6 +24,9 @@ Usage:
 import numpy as np
 from dataclasses import dataclass
 from typing import Optional
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from path_integral import exact_qt_parabolic, compute_u, MASS_H, MASS_D
 
 
 # ── Physical constants ────────────────────────────────────────────────────────
@@ -34,10 +37,6 @@ HBAR = H / (2 * np.pi)
 C    = 2.99792458e10   # Speed of light, cm/s (note: cm not m, for wavenumber conversion)
 NA   = 6.02214076e23   # Avogadro's number
 KCAL_TO_J = 4184.0 / NA  # kcal/mol → J per molecule
-
-# Mass of hydrogen and deuterium in kg
-MASS_H = 1.6735575e-27  # kg
-MASS_D = 3.3444e-27     # kg
 
 # Typical C-H stretch frequency in the REACTANT state (cm⁻¹)
 # Used for classical KIE calculation.
@@ -136,7 +135,8 @@ def bell_correction(
     imaginary_freq_cm1:  float,
     da_distance_angstrom: float,
     temperature:         float = 298.15,
-    experimental_KIE:    Optional[float] = None
+    experimental_KIE:    Optional[float] = None,
+    use_wigner_kirkwood: bool = True,
 ) -> TunnellingResult:
     """
     Bell correction for quantum tunnelling in enzymatic H-transfer.
@@ -171,6 +171,12 @@ def bell_correction(
     experimental_KIE : float, optional
         If you have a measured KIE from the literature or your own experiment,
         provide it here to get the prediction error.
+    use_wigner_kirkwood : bool
+        When True (default), uses the exact parabolic-barrier formula
+        Qt = (u/2)/sin(u/2) from Bell (1958).  This is the full
+        Wigner-Kirkwood sum to all orders and is dramatically more accurate
+        for AADH where u_H ≈ 5.71 (Bell 1st-order underestimates Qt_H by 4.3×).
+        When False, uses the leading term Qt ≈ 1 + u²/24 (Bell approximation).
 
     Returns
     -------
@@ -193,24 +199,25 @@ def bell_correction(
 
     kT = KB * temperature  # thermal energy in Joules
 
-    # Convert imaginary frequency from cm⁻¹ to rad/s (angular frequency)
-    # ν (cm⁻¹) → ω (rad/s): multiply by 2π * c (cm/s)
-    omega_ts = 2 * np.pi * imaginary_freq_cm1 * C  # rad/s
+    # ── Bell / Wigner-Kirkwood tunnelling correction ──────────────────────────
+    # u = ħω†/kT where ω† is the imaginary TS frequency.
+    # Default (use_wigner_kirkwood=True): Qt = (u/2)/sin(u/2) — exact for
+    # a parabolic barrier.  Falls back to 1+u²/24 when flag is False.
 
-    # ── Bell correction formula ──────────────────────────────────────────────
-    # Qt = 1 + (1/24)(u²)   where u = ħω / kT
-    # This is the first-order expansion of the full Bell correction.
-    # u is dimensionless — it's the ratio of the zero-point energy of the
-    # imaginary mode to the thermal energy.
+    u_H = compute_u(imaginary_freq_cm1, temperature, MASS_H)
+    u_D = compute_u(imaginary_freq_cm1, temperature, MASS_D)
 
-    u_H = (HBAR * omega_ts) / kT
-    Qt_H = 1 + (u_H ** 2) / 24
-
-    # For deuterium: same geometry, different mass → frequency scales as 1/√(mass)
-    # ω_D = ω_H / √(m_D / m_H) = ω_H / √2  (since m_D ≈ 2 * m_H)
-    omega_ts_D = omega_ts / np.sqrt(MASS_D / MASS_H)
-    u_D = (HBAR * omega_ts_D) / kT
-    Qt_D = 1 + (u_D ** 2) / 24
+    if use_wigner_kirkwood:
+        # Exact parabolic-barrier formula Qt = (u/2)/sin(u/2).
+        # Incorporates all Wigner-Kirkwood orders; accurate to ~1% when u < 2π.
+        # For AADH u_H ≈ 5.71: Qt_H(exact)=10.2 vs Qt_H(Bell)=2.36 — 4.3× difference.
+        Qt_H = exact_qt_parabolic(u_H)
+        Qt_D = exact_qt_parabolic(u_D)
+    else:
+        # Bell (1958) 1st-order approximation: Qt ≈ 1 + u²/24
+        # Valid only for u << 1. Retained for backward-compatibility.
+        Qt_H = 1.0 + (u_H ** 2) / 24.0
+        Qt_D = 1.0 + (u_D ** 2) / 24.0
 
     # ── Classical KIE (Swain-Schaad) ────────────────────────────────────────
     # The classical KIE comes from ZPE difference in the REACTANT ground state,

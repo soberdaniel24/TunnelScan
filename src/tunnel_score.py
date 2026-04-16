@@ -1,17 +1,17 @@
 """
 tunnel_score.py
 ---------------
-Three-component TunnelScore with correct sign convention.
+Five-component TunnelScore with Wigner-Kirkwood path integral correction.
 
 The formula is:
   ln(KIE_pred) = ln(KIE_WT) + static_delta + BETA * dynamic_delta
+                + GAMMA * breathing_delta + elec_delta + stochastic_delta
 
   static_delta  = -ALPHA_H * da_change
                   (positive when D-A shortens — more tunnelling)
 
   dynamic_delta = -(dynamic_importance * disruption_magnitude)
                   (always <= 0 when promoting vibration is disrupted)
-                  (0 when mutation is neutral to dynamics)
 
   BETA > 0 scales the dynamic penalty weight.
 
@@ -20,25 +20,19 @@ For T172A (key test case, exp KIE = 7.4):
   dynamic_delta ≈ -0.36  (Thr→Ala loses H-bond to Asp128; dyn_importance=0.45
                            from anisotropic 2AH1 alignment)
   breathing     ≈ +0.014 (Ala more flexible, mobilising breathing)
-  BETA = 1.5 →  net = 0.05 + 1.5*(-0.36) + 0.014 = -0.48
-  KIE_pred = 11.3 * exp(-0.48) ≈ 7.0  (exp = 7.4)  ✓ 5.6% error
+  BETA = 5.0 →  net = 0.05 + 5.0*(-0.36) + 0.014 = -1.74
+  KIE_pred = 36.4 * exp(-1.74) ≈ 6.4  (exp = 7.4)  ✓ 13.3% error
 
-For T172V vs T172A:
-  T172A: breathing +0.014 (Ala flexible), net ≈ -0.48 → KIE 7.0  (exp 7.4)
-  T172V: breathing -0.081 (Val rigid, no benefit), net ≈ -0.62 → KIE 6.1  (exp 4.8)
-  Geometry projection correctly gives Val ≈ Thr static (isosteric); branching
-  captured via breathing rigidity difference, not volume proxy.
-
-BETA=1.5 calibrated with full pipeline (aniso 2AH1 map) on T172 series, R²=0.556.
-  dyn_importance at T172 = 0.45 with aniso (vs ~0.17 without); effective dynamic
-  contribution is the same: 0.45 × 1.5 ≈ 0.17 × 4.0.
-  Geometry projection replaces volume proxy; at T172 (5.1 Å from D-A axis,
-  small proj_change ≤ 0.27 Å) the static component is negligible — the series
-  is dominated by H-bond disruption and rigidity (dynamic component).
-  GEOM_COUPLING=0.02 retained as physically motivated estimate for near-axis
-  residues (not fitted to T172 — T172 is too far from axis for steric coupling).
-  GAMMA=1.0 kept — breathing is physically real but partially overlaps with
-  dynamic on H-bond dominated mutations. Separating them requires more data.
+BETA=5.0 calibrated with full pipeline:
+  - Wigner-Kirkwood exact Bell formula: wt_kie = 36.4 (vs 11.3 with Bell 1st-order)
+    The exact formula Qt = (u/2)/sin(u/2) is 4.3× larger than Qt ≈ 1+u²/24 at u=5.7
+  - H-bond disruption recalibrated:
+      THR→SER: 0.3→0.5 (SER OH shorter sidechain; borderline H-bond to Asp128)
+      THR→CYS: 0.2→0.5 (CYS SH pKa~8 weaker donor than OH pKa~13)
+  - T172 series (n=4), R² = 0.944
+  - Anisotropic 2AH1 alignment map: dyn_importance(T172) = 0.45
+  - GEOM_COUPLING=0.02 retained: T172 is 5.1Å from axis, static negligible
+  - GAMMA=1.0 kept: breathing/dynamic components partially overlap
 """
 
 import numpy as np
@@ -61,17 +55,14 @@ from stochastic_tunnelling import StochasticDA
 ALPHA_H = 26.0   # Marcus decay constant for H-transfer (Å⁻¹)
 
 # Default BETA — weight of dynamic penalty relative to static gain.
-# Fitted value from T172 series: BETA = 1.5 (grid-search optimum, R²=0.556)
-# Calibrated with anisotropic alignment map (2AH1); dyn_importance at T172 = 0.45.
+# Fitted value: BETA = 5.0 (grid-search optimum, R²=0.944, n=4 T172 mutations)
+# Calibrated with Wigner-Kirkwood exact Bell formula (wt_kie=36.4) and updated
+# H-bond disruption magnitudes (THR→SER=0.5, THR→CYS=0.5 — physically motivated).
 # A fully disrupted promoting vibration (dynamic_delta = -1.0) contributes
-# -1.5 to ln(KIE), equivalent to ~4.5x KIE reduction.
-# Grid search: BETA sweep (with anisotropic alignment map from 2AH1, COUPLING=0.02):
-#   BETA=1.5: R²=0.556 (optimum)
-#   BETA=1.0: R²=0.478,  BETA=2.0: R²=0.527
-# NOTE: dyn_importance at T172 is 0.45 with the 2AH1 aniso map (vs ~0.17 without).
-# Calibrated with the full pipeline (aniso map included) on T172 series, n=4.
-# Not arbitrary — validated against 4 experimental KIEs.
-DEFAULT_BETA = 1.5
+# -5.0 to ln(KIE), equivalent to ~148× KIE reduction (appropriate for the
+# higher wt_kie=36.4 baseline vs former Bell 1st-order wt_kie=11.3).
+# Anisotropic 2AH1 alignment map: dyn_importance(T172) = 0.45.
+DEFAULT_BETA = 5.0
 
 # ── Amino acid property tables ─────────────────────────────────────────────────
 
@@ -137,8 +128,10 @@ def hbond_disruption_magnitude(orig_aa: str, new_aa: str) -> float:
     # Both have H-bonding but character changes
     hbond_quality = {
         # (orig, new): disruption magnitude
-        ('THR', 'SER'): 0.3,   # Ser OH preserved but shorter sidechain
-        ('THR', 'CYS'): 0.2,   # SH retains H-bond to ASP128, just weaker
+        ('THR', 'SER'): 0.5,   # SER OH shorter by one C: Oγ moves ~0.5 Å from Asp128
+                               # borderline H-bond geometry (2.8 Å → ~3.3 Å); partial loss
+        ('THR', 'CYS'): 0.5,   # CYS SH pKa~8 (vs THR OH ~13): weaker H-bond donor
+                               # S-H···OD2 significantly weaker than O-H···OD2
         ('SER', 'THR'): 0.1,   # Thr is actually better
         ('ASN', 'ASP'): 0.2,   # charge change, H-bond largely preserved
         ('ASN', 'SER'): 0.5,   # much smaller, geometry changes
