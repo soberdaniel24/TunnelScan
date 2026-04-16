@@ -54,6 +54,7 @@ from tunnelling_model import TunnellingResult
 from breathing import compute_breathing_contribution, BreathingResult, AA_RIGIDITY
 from electrostatics import ElectrostaticsMap, build_electrostatics_map
 from bayesian_uncertainty import BayesianConfidence
+from stochastic_tunnelling import StochasticDA
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -184,6 +185,7 @@ class MutationScore:
     dominant_mechanism: str     # 'static' | 'dynamic' | 'mixed' | 'breathing'
     breathing_delta:    float   # breathing contribution to ln(KIE)
     elec_delta:         float   # electrostatic contribution to ln(KIE)
+    stochastic_delta:   float   # D-A distance sampling correction to ln(KIE)
     breathing_mechanism: str    # 'mobilising' | 'rigidifying' | 'neutral'
     is_novel:           bool
     experimental_kie:   Optional[float]
@@ -233,6 +235,7 @@ class TunnelScorer:
         gamma:        float = 1.0,
         substrate_hbond_residue_keys: Optional[List] = None,
         anisotropic_alignment_map: Optional[dict] = None,
+        stochastic_model: Optional[StochasticDA] = None,
         donor_chain:   str = 'A',
         donor_resnum:  int = 1,
         donor_atom:    str = 'CA',
@@ -253,6 +256,7 @@ class TunnelScorer:
         self.acceptor_atom  = acceptor_atom
         self.substrate_hbond_keys = set(substrate_hbond_residue_keys or [])
         self.aniso_map = anisotropic_alignment_map or {}
+        self.stochastic_model = stochastic_model
         self.elec_map: Optional[ElectrostaticsMap] = None  # built on first use
 
     def _dynamic_importance(self, res) -> float:
@@ -613,11 +617,25 @@ class TunnelScorer:
             residue.chain, residue.number, orig_aa, new_aa
         )
 
+        # ── Stochastic D-A sampling component ────────────────────────────────
+        # Accounts for conformational averaging: stiffer mutants sample a
+        # narrower D-A distribution and tunnel less; more flexible mutants
+        # sample a broader distribution.  The correction is typically small
+        # (~0.0001 for T172 series — far from axis) but important for
+        # residues that directly contact the D-A pair.
+        if self.stochastic_model is not None:
+            stoch = self.stochastic_model.compute(
+                (residue.chain, residue.number), orig_aa, new_aa)
+            stochastic_delta = stoch.stochastic_delta
+        else:
+            stochastic_delta = 0.0
+
         # ── Total prediction ──────────────────────────────────────────────────
         total_delta   = (static_delta
                         + self.beta * dynamic_delta
                         + self.gamma * breathing_delta
-                        + elec_delta)
+                        + elec_delta
+                        + stochastic_delta)
         ln_kie_pred   = np.log(self.wt_kie) + total_delta
         predicted_kie = float(np.exp(np.clip(ln_kie_pred, 0.0, 8.0)))
         fold_vs_wt    = predicted_kie / self.wt_kie
@@ -628,10 +646,11 @@ class TunnelScorer:
         abs_breathing = abs(self.gamma * breathing_delta)
 
         components = {
-            'static':    abs_static,
-            'dynamic':   abs_dynamic,
-            'breathing': abs_breathing,
+            'static':      abs_static,
+            'dynamic':     abs_dynamic,
+            'breathing':   abs_breathing,
             'electrostatic': abs(elec_delta),
+            'stochastic':  abs(stochastic_delta),
         }
         dominant = max(components, key=components.get)
         # Only call it dominated if it's clearly largest
@@ -676,6 +695,7 @@ class TunnelScorer:
             dominant_mechanism=dominant,
             breathing_delta=breathing_delta,
             elec_delta=elec_delta,
+            stochastic_delta=stochastic_delta,
             breathing_mechanism=breath.mechanism,
             is_novel=is_novel_prediction(label),
             experimental_kie=exp_kie,

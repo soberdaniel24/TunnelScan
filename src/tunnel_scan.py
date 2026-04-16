@@ -30,6 +30,7 @@ from tunnel_score import TunnelScorer, SUBSTITUTION_CANDIDATES, MutationScore, D
 from bayesian_uncertainty import add_bayesian_confidence
 from calibration import AADH_KIE_DATA
 from multi_mutation import scan_double_mutants, print_double_mutant_report
+from stochastic_tunnelling import build_stochastic_model
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Tuple
 
@@ -249,6 +250,22 @@ def run_scan(
         high_part = enm.high_participation_residues(0.75)
         print(f"      {len(high_part)} residues in top 25% promoting vibration participation")
 
+    # ── Build stochastic D-A model ────────────────────────────────────────────
+    stochastic_model = None
+    try:
+        stochastic_model = build_stochastic_model(
+            structure    = s,
+            enm          = enm,
+            donor_key    = (d_chain, d_resnum),
+            acceptor_key = (a_chain, a_resnum),
+        )
+        if verbose:
+            print(f"      Stochastic D-A model: σ_DA_WT = {stochastic_model.sigma_da_wt:.4f} Å"
+                  f"  (WT boost = {stochastic_model.wt_stochastic_delta():.4f} ln(KIE) units)")
+    except Exception as e:
+        if verbose:
+            print(f"      Stochastic model failed: {e} — stochastic_delta will be 0")
+
     # ── Build anisotropic alignment map ──────────────────────────────────────
     # Use 2AH1 (oxidised AADH with ANISOU records) to get crystallographic
     # evidence of which residues move preferentially along the D-A axis.
@@ -291,6 +308,7 @@ def run_scan(
         gamma=1.0,
         substrate_hbond_residue_keys=substrate_hbond_keys,
         anisotropic_alignment_map=aniso_map,
+        stochastic_model=stochastic_model,
         donor_chain    =d_chain,
         donor_resnum   =d_resnum,
         donor_atom     =d_atom,
