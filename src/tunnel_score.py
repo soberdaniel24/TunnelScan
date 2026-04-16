@@ -185,6 +185,10 @@ class MutationScore:
     experimental_kie:   Optional[float]
     prediction_error:   Optional[float]
 
+    # Populated by apply_gpr_corrections() in tunnel_scan after GPR fit
+    gpr_delta:          float = 0.0   # sparse GP regression correction (post-GNN)
+    gpr_variance:       float = 0.0   # GPR posterior uncertainty (ln(KIE))²
+
     # Bayesian uncertainty — populated after scan completes via
     # bayesian_uncertainty.add_bayesian_confidence(); None until then.
     bayes: Optional[BayesianConfidence] = None

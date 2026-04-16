@@ -32,6 +32,8 @@ from calibration import AADH_KIE_DATA
 from multi_mutation import scan_double_mutants, print_double_mutant_report
 from stochastic_tunnelling import build_stochastic_model
 from gnn_coupling import build_gnn_model, compute_gnn_residuals_from_scan
+from gp_regression import (build_gpr_model, compute_gpr_residuals_from_scan,
+                            extract_gpr_feature)
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Tuple
 
@@ -425,6 +427,44 @@ def run_scan(
         if verbose:
             print(f"  GNN correction skipped: {e}")
         result.gnn_model = None
+
+    # ── Sparse GP regression correction ──────────────────────────────────────
+    # Two-pass approach (parallel to GNN):
+    #   1. Compute post-GNN residuals for known mutations
+    #   2. Fit Sparse GP with physics-informed kernel on those residuals
+    #   3. Apply GPR corrections + uncertainty bands to every MutationScore
+    try:
+        gpr_residuals = compute_gpr_residuals_from_scan(all_scores, AADH_KIE_DATA)
+        if gpr_residuals:
+            gpr_model = build_gpr_model(all_scores, gpr_residuals, verbose=verbose)
+            if gpr_model.is_fitted():
+                import math as _math
+                for sc in all_scores:
+                    feat         = extract_gpr_feature(sc)
+                    gpr_r        = gpr_model.predict(feat)
+                    sc.gpr_delta    = gpr_r.gpr_delta
+                    sc.gpr_variance = gpr_r.variance
+                    sc.total_delta += gpr_r.gpr_delta
+                    ln_kie = _math.log(sc.predicted_kie) + gpr_r.gpr_delta
+                    sc.predicted_kie  = float(_math.exp(min(ln_kie, 8.0)))
+                    sc.fold_vs_wt     = sc.predicted_kie / wt_result.predicted_KIE
+                    if sc.experimental_kie:
+                        sc.prediction_error = (abs(sc.predicted_kie - sc.experimental_kie)
+                                               / sc.experimental_kie)
+                all_scores.sort(key=lambda x: x.predicted_kie, reverse=True)
+                if verbose:
+                    cal_r2_gpr = result.calibration_r2
+                    if not np.isnan(cal_r2_gpr):
+                        print(f"  Calibration R² after GPR: {cal_r2_gpr:.3f}")
+                result.gpr_model = gpr_model
+            else:
+                result.gpr_model = None
+        else:
+            result.gpr_model = None
+    except Exception as e:
+        if verbose:
+            print(f"  GPR correction skipped: {e}")
+        result.gpr_model = None
 
     # ── Bayesian uncertainty quantification ───────────────────────────────────
     # Fitted on T172 calibration series after physics scan; enriches every
