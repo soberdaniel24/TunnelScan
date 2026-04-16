@@ -17,9 +17,10 @@ The formula is:
 
 For T172A (key test case, exp KIE = 7.4):
   static_delta  ≈ +0.05  (T172 at 5.1 Å from D-A; geometry proj near-negligible)
-  dynamic_delta ≈ -0.135 (Thr→Ala loses H-bond to Asp128, complete disruption=1.0)
+  dynamic_delta ≈ -0.36  (Thr→Ala loses H-bond to Asp128; dyn_importance=0.45
+                           from anisotropic 2AH1 alignment)
   breathing     ≈ +0.014 (Ala more flexible, mobilising breathing)
-  BETA = 4.0 →  net = 0.05 + 4.0*(-0.135) + 0.014 = -0.48
+  BETA = 1.5 →  net = 0.05 + 1.5*(-0.36) + 0.014 = -0.48
   KIE_pred = 11.3 * exp(-0.48) ≈ 7.0  (exp = 7.4)  ✓ 5.6% error
 
 For T172V vs T172A:
@@ -28,7 +29,9 @@ For T172V vs T172A:
   Geometry projection correctly gives Val ≈ Thr static (isosteric); branching
   captured via breathing rigidity difference, not volume proxy.
 
-BETA=4.0 fitted via dense grid search (BETA×COUPLING) on T172 series (R²=0.645).
+BETA=1.5 calibrated with full pipeline (aniso 2AH1 map) on T172 series, R²=0.556.
+  dyn_importance at T172 = 0.45 with aniso (vs ~0.17 without); effective dynamic
+  contribution is the same: 0.45 × 1.5 ≈ 0.17 × 4.0.
   Geometry projection replaces volume proxy; at T172 (5.1 Å from D-A axis,
   small proj_change ≤ 0.27 Å) the static component is negligible — the series
   is dominated by H-bond disruption and rigidity (dynamic component).
@@ -56,16 +59,17 @@ from electrostatics import ElectrostaticsMap, build_electrostatics_map
 ALPHA_H = 26.0   # Marcus decay constant for H-transfer (Å⁻¹)
 
 # Default BETA — weight of dynamic penalty relative to static gain.
-# Fitted value from T172 series: BETA = 4.0 (grid-search optimum, R²=0.645)
-# This means a fully disrupted promoting vibration (dynamic_delta = -1.0)
-# contributes -4.0 to ln(KIE), equivalent to ~55x KIE reduction.
-# Grid search: BETA×COUPLING dense grid on T172 series (2AGW geometry):
-#   BETA=4.0, COUPLING→0: R²=0.645 (optimum)
-#   BETA=3.0, COUPLING→0: R²=0.605
-#   BETA=5.0, COUPLING→0: R²=0.609
-# T172 series is H-bond / rigidity dominated; static component negligible at
-# 5.1 Å from D-A axis. Not arbitrary — validated against 4 experimental KIEs.
-DEFAULT_BETA = 4.0
+# Fitted value from T172 series: BETA = 1.5 (grid-search optimum, R²=0.556)
+# Calibrated with anisotropic alignment map (2AH1); dyn_importance at T172 = 0.45.
+# A fully disrupted promoting vibration (dynamic_delta = -1.0) contributes
+# -1.5 to ln(KIE), equivalent to ~4.5x KIE reduction.
+# Grid search: BETA sweep (with anisotropic alignment map from 2AH1, COUPLING=0.02):
+#   BETA=1.5: R²=0.556 (optimum)
+#   BETA=1.0: R²=0.478,  BETA=2.0: R²=0.527
+# NOTE: dyn_importance at T172 is 0.45 with the 2AH1 aniso map (vs ~0.17 without).
+# Calibrated with the full pipeline (aniso map included) on T172 series, n=4.
+# Not arbitrary — validated against 4 experimental KIEs.
+DEFAULT_BETA = 1.5
 
 # ── Amino acid property tables ─────────────────────────────────────────────────
 

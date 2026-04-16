@@ -26,7 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pdb_parser import Structure, Residue
 from elastic_network import build_gnm
 from tunnelling_model import bell_correction
-from tunnel_score import TunnelScorer, SUBSTITUTION_CANDIDATES, MutationScore
+from tunnel_score import TunnelScorer, SUBSTITUTION_CANDIDATES, MutationScore, DEFAULT_BETA
 from multi_mutation import scan_double_mutants, print_double_mutant_report
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Tuple
@@ -143,7 +143,7 @@ DHFR_CONFIG = ActiveSiteConfig(
 def run_scan(
     pdb_path:   str,
     config:     ActiveSiteConfig,
-    beta:       float = 3.0,
+    beta:       float = DEFAULT_BETA,
     verbose:    bool = True
 ) -> ScanResult:
     """

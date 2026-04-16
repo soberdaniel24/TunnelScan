@@ -46,7 +46,6 @@ def main():
     result = run_scan(
         pdb_path=pdb_path,
         config=AADH_CONFIG,
-        beta=3.0,
         verbose=True
     )
 
