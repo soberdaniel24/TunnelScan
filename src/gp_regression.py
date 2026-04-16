@@ -53,11 +53,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 N_FEATURES   = 6   # number of continuous features per mutation
 MAX_INDUCING = 20  # maximum inducing points (switch to exact GP when N ≤ M)
 
-# LOO cross-validation (T172 series, 4 mutations) yields LOO-R² = 0.622.
-# With n=4 the GP interpolates the training set but cannot generalise reliably.
-# Gate: require at least this many calibration mutations before activating GPR.
-# Rationale: n=8 (2× current) is the minimum where the DTC marginal likelihood
-# can distinguish length scales and noise reliably in a 6D feature space.
+# LOO cross-validation (T172 series, n=4, with 2AH1 aniso map):
+#   Physics-only:  LOO-R²=0.941  LOO-RMSE=0.121 ln(KIE)
+#   Physics+GPR:   LOO-R²=0.921  LOO-RMSE=0.140 ln(KIE)
+# GPR passes R²≥0.70 but marginally worsens RMSE — physics is already excellent.
+# Activation requires BOTH: LOO-R²≥0.70 AND LOO-RMSE(GPR)<LOO-RMSE(physics).
+# Practical gate: n≥8 ensures enough data to distinguish kernel length scales.
 MIN_CALIBRATION_GPR = 8
 
 # Mechanism index mapping

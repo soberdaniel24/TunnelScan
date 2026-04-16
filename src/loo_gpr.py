@@ -21,8 +21,10 @@ from stochastic_tunnelling import build_stochastic_model
 from calibration import AADH_KIE_DATA
 from gp_regression import SparseGP, extract_gpr_feature
 
-PDB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                        '..', 'data', 'structures', '2AGW.pdb')
+PDB_PATH   = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          '..', 'data', 'structures', '2AGW.pdb')
+ANISO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          '..', 'data', 'structures', '2AH1.pdb')
 LOO_R2_THRESHOLD = 0.70
 
 
@@ -47,16 +49,34 @@ def main():
 
     d_chain, d_resnum, d_atom = 'D', 3001, 'CA'
     a_chain, a_resnum, a_atom = 'D', 128,  'OD2'
-    da = s.get_atom(d_chain, d_resnum, d_atom) or s.get_residue(d_chain, d_resnum).ca
-    aa = s.get_atom(a_chain, a_resnum, a_atom) or s.get_residue(a_chain, a_resnum).ca
-    da_dist = float(np.linalg.norm(aa.coords - da.coords))
+    da  = s.get_atom(d_chain, d_resnum, d_atom) or s.get_residue(d_chain, d_resnum).ca
+    acc = s.get_atom(a_chain, a_resnum, a_atom) or s.get_residue(a_chain, a_resnum).ca
+    da_dist = float(np.linalg.norm(acc.coords - da.coords))
+
+    donor_coords    = da.coords
+    acceptor_coords = acc.coords
 
     wt = bell_correction(13.4, 1184.0, min(da_dist, 3.5),
                          experimental_KIE=55.0, use_wigner_kirkwood=True)
     stoch = build_stochastic_model(s, enm, (d_chain, d_resnum), (a_chain, a_resnum))
 
+    # Load 2AH1 anisotropic alignment map — identical path logic to run_tunnelscan.py
+    aniso_map = {}
+    if os.path.exists(ANISO_PATH):
+        try:
+            from anisotropic_bfactor import build_alignment_map
+            aniso_map = build_alignment_map(ANISO_PATH, donor_coords, acceptor_coords)
+            t172_score = aniso_map.get((a_chain, 172), None)
+            print(f"  Anisotropic map loaded: {len(aniso_map)} residues from 2AH1"
+                  + (f"  (T172 score: {t172_score:.4f})" if t172_score else ""))
+        except Exception as e:
+            print(f"  WARNING: aniso map failed — {e}")
+    else:
+        print(f"  WARNING: {ANISO_PATH} not found — dyn_importance will use B-factor+ENM fallback")
+
     scorer = TunnelScorer(
         s, enm, wt, beta=DEFAULT_BETA, gamma=1.0,
+        anisotropic_alignment_map=aniso_map,
         stochastic_model=stoch,
         donor_chain=d_chain, donor_resnum=d_resnum, donor_atom=d_atom,
         acceptor_chain=a_chain, acceptor_resnum=a_resnum, acceptor_atom=a_atom,
@@ -157,24 +177,35 @@ def main():
           f"LOO-RMSE = {loo_rmse_gpr:.4f} ln(KIE)")
     print()
 
-    gpr_improves = loo_r2_gpr > loo_r2_phys
-    exceeds_threshold = loo_r2_gpr >= LOO_R2_THRESHOLD
+    gpr_improves_r2   = loo_r2_gpr   > loo_r2_phys
+    gpr_improves_rmse = loo_rmse_gpr < loo_rmse_phys
+    exceeds_threshold = loo_r2_gpr  >= LOO_R2_THRESHOLD
 
     print(f"  LOO-R² threshold: {LOO_R2_THRESHOLD}")
-    print(f"  GPR improves over physics: {gpr_improves}")
+    print(f"  GPR improves LOO-R²:   {gpr_improves_r2}")
+    print(f"  GPR improves LOO-RMSE: {gpr_improves_rmse}")
 
+    # Two conditions required to activate GPR:
+    #   1. LOO-R² ≥ 0.70  (GP generalises, not wildly overfitting)
+    #   2. LOO-RMSE(GPR) < LOO-RMSE(physics)  (GPR actually reduces error)
+    # Condition 2 guards against the case where physics is already excellent and
+    # GPR only adds noise (passes R² gate but doesn't help).
     if not exceeds_threshold:
         print()
         print(f"  *** LOO-R² = {loo_r2_gpr:.4f} < {LOO_R2_THRESHOLD} THRESHOLD ***")
-        print(f"  *** GPR IS OVERFITTING — DISABLING FROM MAIN PIPELINE ***")
-        print(f"  *** Reason: with n={n} calibration points the GP interpolates")
-        print(f"  ***   the training set but cannot generalise reliably. ***")
-        print(f"  *** Action: GPR block will be gated behind a minimum-data")
-        print(f"  ***   check (n ≥ 8 calibration mutations required). ***")
+        print(f"  *** GPR IS OVERFITTING — keep gated ***")
+        verdict = 'DISABLE'
+    elif not gpr_improves_rmse:
+        print()
+        print(f"  *** LOO-R² = {loo_r2_gpr:.4f} ≥ {LOO_R2_THRESHOLD} (passes threshold) ***")
+        print(f"  *** BUT GPR LOO-RMSE ({loo_rmse_gpr:.4f}) ≥ physics ({loo_rmse_phys:.4f}) ***")
+        print(f"  *** Physics pipeline already excellent — GPR adds no improvement ***")
+        print(f"  *** Keep gated until GPR demonstrates RMSE reduction ***")
         verdict = 'DISABLE'
     else:
         print()
-        print(f"  LOO-R² = {loo_r2_gpr:.4f} ≥ {LOO_R2_THRESHOLD} — GPR is predictive")
+        print(f"  LOO-R² = {loo_r2_gpr:.4f} ≥ {LOO_R2_THRESHOLD} AND RMSE reduced "
+              f"({loo_rmse_phys:.4f} → {loo_rmse_gpr:.4f}) — GPR is beneficial")
         verdict = 'KEEP'
 
     print()

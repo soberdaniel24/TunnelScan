@@ -434,10 +434,12 @@ def run_scan(
     #   2. Fit Sparse GP with physics-informed kernel on those residuals
     #   3. Apply GPR corrections + uncertainty bands to every MutationScore
     #
-    # GATING: LOO cross-validation on the current T172 series (n=4) yields
-    # LOO-R²=0.622 < 0.70 threshold, indicating overfitting with n<8.
-    # GPR is held in reserve until ≥8 calibration mutations are available.
-    # Run src/loo_gpr.py to re-evaluate when new experimental data arrives.
+    # GATING: LOO cross-validation (T172 series, n=4, with 2AH1 aniso map):
+    #   Physics-only  LOO-R²=0.941  LOO-RMSE=0.121 ln(KIE)
+    #   Physics+GPR   LOO-R²=0.921  LOO-RMSE=0.140 ln(KIE)
+    # GPR passes the R²≥0.70 threshold but INCREASES RMSE — the physics pipeline
+    # is already excellent and GPR adds noise at n=4.  Gate until GPR demonstrates
+    # a strict RMSE reduction in LOO.  Run src/loo_gpr.py to re-evaluate.
     try:
         gpr_residuals = compute_gpr_residuals_from_scan(all_scores, AADH_KIE_DATA)
         if len(gpr_residuals) >= MIN_CALIBRATION_GPR:
