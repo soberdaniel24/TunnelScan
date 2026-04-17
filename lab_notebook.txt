@@ -1,0 +1,19 @@
+Thu Apr  9 15:53:29 BST 2026: Top synergistic double mutants from TunnelScan 2AGW scan
+F343G/P356G - static+dynamic, interaction=+0.052, fold>best=+1.64x
+F343G/P356A - static+dynamic, interaction=+0.052, fold>best=+1.64x  
+F343G/D378A - static+dynamic, interaction=+0.052, fold>best=+0.47x
+Mechanism: F343 is large aromatic removal (static geometry), P356/D378 are
+backbone flexibility/charge mutations (dynamic promoting vibration)
+These are novel - no published double mutants at these positions
+
+Thu Apr 17 (2026): Donor atom fix + 2IUQ cross-validation
+- Fixed AADH_CONFIG: changed donor atom CA → CB (Cβ is the actual proton donor in tryptamine)
+  Old: TSS D3001 CA → Asp D128 OD2 = 5.77 Å
+  New: TSS D3001 CB → Asp D128 OD2 = 6.45 Å
+  LOO-R² unchanged at 0.9410 (model robust to this geometric correction)
+- Added AADH_2IUQ_CONFIG using 2IUQ (substrate-bound, reduced TTQ)
+  Cross-subunit pairing: donor chain B (alpha, 361aa) → acceptor chain D (beta, 135aa) = 6.65 Å
+  Result: calibration R² = -1.18 (UNCALIBRATED)
+  Cause: T172 calibration mutations rely on intrasubunit 2AGW geometry; cross-subunit
+  2IUQ geometry places T172 wrong relative to D-A axis (T172V: pred=16.7, exp=4.8, 3.5×)
+  Conclusion: 2IUQ does not improve 2AGW predictions; 2AGW remains primary structure

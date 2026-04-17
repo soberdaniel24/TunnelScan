@@ -74,12 +74,11 @@ AADH_CONFIG = ActiveSiteConfig(
     name='AADH (Alcaligenes faecalis) + tryptamine',
     pdb_id='2AGW',
 
-    # Donor: Cβ of tryptamine (HETATM, chain A, residue 1 in 1AX3)
-    # This is the carbon whose C-H bond breaks during the reaction
-    donor=('D', 3001, 'CA'),
+    # Donor: Cβ of tryptamine (HETATM, chain D, residue 3001 in 2AGW)
+    # Cβ-H is the bond that breaks; CB not CA is the heavy-atom donor
+    donor=('D', 3001, 'CB'),
 
-    # Acceptor: OD2 of catalytic Asp128 (chain B small subunit)
-    # This is the oxygen that abstracts the proton via tunnelling
+    # Acceptor: OD2 of catalytic Asp128 (chain D, small beta subunit)
     acceptor=('D', 128, 'OD2'),
 
     barrier_height_kcal=13.4,
@@ -87,6 +86,31 @@ AADH_CONFIG = ActiveSiteConfig(
 
     # Asp128 is the catalytic base — mutating it destroys activity entirely
     # Trp160/Trp109 form the TTQ cofactor — do not mutate
+    catalytic_residues=[('D', 128), ('D', 109), ('D', 160)],
+
+    scan_radius=8.0,
+    wt_kie_exp=55.0,
+)
+
+# 2IUQ: dithionite-reduced AADH with tryptamine covalently bound (TSS adduct).
+# CAUTION — UNCALIBRATED: in 2IUQ the TSS sits in the large alpha subunit (chain B)
+# while the TTQ/Asp128 are in the small beta subunit (chain D), giving a cross-subunit
+# D-A axis.  The T172 calibration data (measured on 2AGW intrasubunit geometry) does
+# NOT transfer: T172V mispredicted 3.5× (16.7 vs 4.8 experimental).  Use 2AGW-based
+# AADH_CONFIG for validated predictions; 2IUQ is kept for structural comparison only.
+AADH_2IUQ_CONFIG = ActiveSiteConfig(
+    name='AADH (Alcaligenes faecalis) + tryptamine, 2IUQ substrate-bound',
+    pdb_id='2IUQ',
+
+    # Donor: Cβ of TSS (tryptamine adduct, chain B residue 1434)
+    donor=('B', 1434, 'CB'),
+
+    # Acceptor: OD2 of catalytic Asp128, beta chain D (pairs with alpha chain B)
+    acceptor=('D', 128, 'OD2'),
+
+    barrier_height_kcal=13.4,
+    imaginary_freq_cm1=1184.0,
+
     catalytic_residues=[('D', 128), ('D', 109), ('D', 160)],
 
     scan_radius=8.0,
