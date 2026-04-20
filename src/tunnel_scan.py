@@ -318,6 +318,39 @@ def run_scan(
         print(f"      2AH1.pdb not found — skipping anisotropic alignment")
         print(f"      (download with: curl -o {aniso_pdb} https://files.rcsb.org/download/2AH1.pdb)")
 
+    # ── QCF fallback for residues lacking ANISOU coverage ────────────────────
+    # For any residue near the D-A axis that has no entry in aniso_map
+    # (coverage gap, different crystal form, novel enzyme), substitute the
+    # QCF zero-point amplitude proxy from quantum_conformational_field.
+    try:
+        from quantum_conformational_field import (
+            build_quantum_propagator, replace_anisou_with_qcf
+        )
+        da_unit_vec = acceptor_coords - donor_coords
+        da_len_vec  = float(np.linalg.norm(da_unit_vec))
+        if da_len_vec > 0.01:
+            da_unit_vec = da_unit_vec / da_len_vec
+
+        qcf_result   = build_quantum_propagator(
+            enm, config.imaginary_freq_cm1, 298.15, structure=s
+        )
+        qcf_aln_map  = replace_anisou_with_qcf(s, qcf_result, da_unit_vec)
+
+        n_qcf_filled = 0
+        for key, score in qcf_aln_map.items():
+            if key not in aniso_map:
+                aniso_map[key] = score
+                n_qcf_filled  += 1
+
+        if verbose and n_qcf_filled > 0:
+            print(f"      QCF alignment fallback: {n_qcf_filled} residues "
+                  f"supplemented (m̃ = {qcf_result.mass_term:.4f})")
+        elif verbose and n_qcf_filled == 0 and qcf_aln_map:
+            print(f"      QCF alignment: full ANISOU coverage, no gaps to fill")
+    except Exception as e:
+        if verbose:
+            print(f"      QCF alignment fallback skipped: {e}")
+
     # ── Identify substrate H-bond partners ───────────────────────────────────
     substrate = s.get_residue(d_chain, d_resnum)
     substrate_hbond_keys = []
