@@ -1,0 +1,408 @@
+"""
+anisotropic_network_model.py
+----------------------------
+Anisotropic Network Model (ANM) for computing 3D residue displacement modes.
+
+ANM extends GNM from scalar to vector displacements:
+  GNM: Kirchhoff matrix (N×N), scalar fluctuations → B-factor magnitudes
+  ANM: Hessian matrix (3N×3N), vector fluctuations → B-factor directions
+
+The Hessian is built from inter-residue Cα vectors:
+  H_ij = -(γ/r_ij²) r̂_ij ⊗ r̂_ij   for i≠j, r_ij < cutoff
+  H_ii = -Σ_{j≠i} H_ij               (sum rule, maintains translational invariance)
+
+3N×3N symmetric matrix → 6 near-zero eigenvalues (3 translations + 3 rotations)
+Remaining modes encode internal conformational fluctuations with direction.
+
+References:
+  Atilgan et al. (2001) Biophys J 80:505 — original ANM
+  Yang & Bahar (2005) Structure 13:893 — D-A coupling
+"""
+
+import numpy as np
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple
+
+ANM_CUTOFF  = 7.5   # Å, same as GNM
+ANM_GAMMA   = 1.0   # spring constant (dimensionless)
+N_TRIVIAL   = 6     # rigid-body modes to discard
+
+
+@dataclass
+class ANMResult:
+    n_residues:   int
+    hessian:      np.ndarray       # (3N, 3N)
+    eigenvalues:  np.ndarray       # (n_modes,) non-trivial only
+    eigenmodes:   np.ndarray       # (N, 3, n_modes) reshaped displacements
+    residue_keys: List[Tuple[str, int]]
+    residue_map:  Dict[Tuple[str, int], int]
+    ca_coords:    np.ndarray       # (N, 3)
+
+
+def build_anm_hessian(
+    structure,
+    cutoff: float = ANM_CUTOFF,
+    gamma:  float = ANM_GAMMA,
+) -> Tuple[np.ndarray, List[Tuple[str, int]], np.ndarray]:
+    """
+    Build 3N×3N ANM Hessian from Cα coordinates.
+
+    Returns (hessian, residue_keys, ca_coords).
+    """
+    residues  = [r for r in structure.protein_residues() if r.ca is not None]
+    if len(residues) < 4:
+        raise ValueError(f"Need ≥4 Cα residues, got {len(residues)}")
+
+    n         = len(residues)
+    ca_coords = np.array([r.ca.coords for r in residues], dtype=float)
+    keys      = [(r.chain, r.number) for r in residues]
+
+    H = np.zeros((3 * n, 3 * n))
+
+    # Off-diagonal blocks
+    for i in range(n):
+        for j in range(i + 1, n):
+            dvec = ca_coords[j] - ca_coords[i]
+            dist = float(np.linalg.norm(dvec))
+            if dist < 0.1 or dist >= cutoff:
+                continue
+            r_hat = dvec / dist
+            block = -(gamma / dist ** 2) * np.outer(r_hat, r_hat)
+            si, sj = 3 * i, 3 * j
+            H[si:si+3, sj:sj+3] += block
+            H[sj:sj+3, si:si+3] += block   # symmetric
+
+    # Diagonal blocks: H_ii = -Σ_{j≠i} H_ij  (sum rule)
+    for i in range(n):
+        si = 3 * i
+        diag_block = np.zeros((3, 3))
+        for j in range(n):
+            if j == i:
+                continue
+            sj = 3 * j
+            diag_block += H[si:si+3, sj:sj+3]
+        H[si:si+3, si:si+3] = -diag_block
+
+    return H, keys, ca_coords
+
+
+def anm_eigenmodes(
+    hessian:  np.ndarray,
+    n_modes:  int = 20,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Diagonalize ANM Hessian, returning n_modes non-trivial modes.
+
+    Skips the 6 lowest eigenvalues (rigid-body degrees of freedom).
+
+    Returns
+    -------
+    modes : (N, 3, n_modes)  per-residue 3D displacement in each mode
+    evals : (n_modes,)       mode force constants (all positive)
+    """
+    n3 = hessian.shape[0]
+    n  = n3 // 3
+
+    eigenvalues, eigenvectors = np.linalg.eigh(hessian)  # ascending order
+
+    start = N_TRIVIAL
+    end   = min(start + n_modes, n3)
+    evals = eigenvalues[start:end]
+    evecs = eigenvectors[:, start:end]   # (3N, n_modes)
+
+    modes = evecs.reshape(n, 3, end - start)   # (N, 3, n_modes)
+    return modes, evals
+
+
+def anm_principal_axis(
+    modes:       np.ndarray,
+    evals:       np.ndarray,
+    chain:       str,
+    resnum:      int,
+    residue_map: Dict[Tuple[str, int], int],
+) -> Optional[np.ndarray]:
+    """
+    Principal axis of motion for a residue: Σ_k (1/λ_k) u_k(i), normalized.
+
+    Returns unit vector pointing in the direction of maximum weighted
+    displacement, or None if residue not found.
+    """
+    key = (chain, resnum)
+    if key not in residue_map:
+        return None
+    i = residue_map[key]
+
+    inv_lam  = 1.0 / evals               # (n_modes,)
+    weighted = modes[i] @ inv_lam        # (3,)  = Σ_k (1/λ_k) u_k(i)
+
+    norm = float(np.linalg.norm(weighted))
+    if norm < 1e-10:
+        return None
+    return weighted / norm
+
+
+def anm_da_alignment(
+    modes:       np.ndarray,
+    evals:       np.ndarray,
+    chain:       str,
+    resnum:      int,
+    residue_map: Dict[Tuple[str, int], int],
+    da_unit:     np.ndarray,
+) -> float:
+    """
+    D-A alignment score for a residue.
+
+    Score = Σ_k (1/λ_k) |u_k(i) · d̂_DA|²  /  Σ_k (1/λ_k)
+
+    Ranges [0, 1]: fraction of low-frequency weighted fluctuation amplitude
+    that lies along the donor-acceptor compression axis.
+
+    Returns 0.5 for missing residues (neutral prior).
+    """
+    key = (chain, resnum)
+    if key not in residue_map:
+        return 0.5
+
+    i = residue_map[key]
+    inv_lam  = 1.0 / evals                         # (n_modes,)
+    da_proj  = da_unit @ modes[i]                  # (n_modes,)  u_k(i) · d̂
+    num      = float(np.dot(inv_lam, da_proj ** 2))
+    denom    = float(np.sum(inv_lam))
+
+    if denom < 1e-12:
+        return 0.5
+    return float(np.clip(num / denom, 0.0, 1.0))
+
+
+def validate_against_anisou(
+    anm_result:      'ANMResult',
+    anisou_data:     dict,
+    donor_coords:    np.ndarray,
+    acceptor_coords: np.ndarray,
+    chain_filter:    Optional[str] = None,
+    t172_resnum:     int = 172,
+    n156_resnum:     int = 156,
+) -> dict:
+    """
+    Validate ANM principal axes against crystallographic ANISOU tensors.
+
+    Checks:
+      1. mean |ANM_principal · ANISOU_principal| > 0.5 (directional agreement)
+      2. T172 D-A alignment > N156 D-A alignment       (active-site specificity)
+
+    Returns dict: passed, mean_dot, n_pairs, t172_score, n156_score,
+                  check1_ok, check2_ok
+    """
+    from anisotropic_bfactor import get_residue_principal_axis
+
+    da_unit = acceptor_coords - donor_coords
+    da_norm = float(np.linalg.norm(da_unit))
+    if da_norm < 0.01:
+        return dict(passed=False, mean_dot=0.0, n_pairs=0,
+                    t172_score=0.5, n156_score=0.5,
+                    check1_ok=False, check2_ok=False)
+    da_unit = da_unit / da_norm
+
+    dots       = []
+    anm_chain  = None
+
+    for key in anm_result.residue_keys:
+        chain, resnum = key
+        if chain_filter and chain != chain_filter:
+            continue
+        anm_chain = chain
+
+        anisou_axis = get_residue_principal_axis(anisou_data, chain, resnum)
+        if anisou_axis is None:
+            continue
+
+        anm_axis = anm_principal_axis(
+            anm_result.eigenmodes, anm_result.eigenvalues,
+            chain, resnum, anm_result.residue_map
+        )
+        if anm_axis is None:
+            continue
+
+        dots.append(abs(float(np.dot(anm_axis, anisou_axis))))
+
+    mean_dot = float(np.mean(dots)) if dots else 0.0
+
+    tgt_chain  = chain_filter or anm_chain or 'A'
+    t172_score = anm_da_alignment(
+        anm_result.eigenmodes, anm_result.eigenvalues,
+        tgt_chain, t172_resnum, anm_result.residue_map, da_unit
+    )
+    n156_score = anm_da_alignment(
+        anm_result.eigenmodes, anm_result.eigenvalues,
+        tgt_chain, n156_resnum, anm_result.residue_map, da_unit
+    )
+
+    check1 = mean_dot > 0.5
+    check2 = t172_score > n156_score
+
+    return dict(
+        passed     = check1 and check2,
+        mean_dot   = mean_dot,
+        n_pairs    = len(dots),
+        t172_score = t172_score,
+        n156_score = n156_score,
+        check1_ok  = check1,
+        check2_ok  = check2,
+    )
+
+
+def build_anm(
+    structure,
+    cutoff:  float = ANM_CUTOFF,
+    n_modes: int   = 20,
+) -> ANMResult:
+    """Build full ANMResult in one call."""
+    H, keys, ca_coords = build_anm_hessian(structure, cutoff)
+    modes, evals       = anm_eigenmodes(H, n_modes)
+    rmap               = {k: i for i, k in enumerate(keys)}
+    return ANMResult(
+        n_residues   = len(keys),
+        hessian      = H,
+        eigenvalues  = evals,
+        eigenmodes   = modes,
+        residue_keys = keys,
+        residue_map  = rmap,
+        ca_coords    = ca_coords,
+    )
+
+
+def anm_alignment_map(
+    anm_result: ANMResult,
+    da_unit:    np.ndarray,
+) -> Dict[Tuple[str, int], float]:
+    """D-A alignment scores for all residues in an ANMResult."""
+    return {
+        key: anm_da_alignment(
+            anm_result.eigenmodes, anm_result.eigenvalues,
+            key[0], key[1], anm_result.residue_map, da_unit
+        )
+        for key in anm_result.residue_keys
+    }
+
+
+# ── Self-tests ────────────────────────────────────────────────────────────────
+
+class _MockAtom:
+    def __init__(self, coords):
+        self.coords = np.array(coords, dtype=float)
+
+class _MockResidue:
+    def __init__(self, chain, number, coords):
+        self.chain  = chain
+        self.number = number
+        self.ca     = _MockAtom(coords)
+
+class _MockStructure:
+    def __init__(self, residues):
+        self._residues = residues
+    def protein_residues(self, chain=None):
+        if chain:
+            return [r for r in self._residues if r.chain == chain]
+        return self._residues
+
+
+def _self_tests():
+    passed = 0
+    failed = 0
+
+    def check(name, condition, detail=""):
+        nonlocal passed, failed
+        if condition:
+            print(f"  [PASS] {name}")
+            passed += 1
+        else:
+            print(f"  [FAIL] {name}  {detail}")
+            failed += 1
+
+    print("─" * 60)
+    print("ANM self-tests")
+    print("─" * 60)
+
+    # ── Check 1: exactly 6 near-zero eigenvalues (rigid-body modes) ───────────
+    # 8 atoms at corners of a 3Å cube → 24 DOF, 6 zero modes
+    cube_coords = [(3.0*i, 3.0*j, 3.0*k)
+                   for i in range(2) for j in range(2) for k in range(2)]
+    cube_res    = [_MockResidue('A', n+1, c) for n, c in enumerate(cube_coords)]
+    cube_struct = _MockStructure(cube_res)
+
+    H, keys, _ = build_anm_hessian(cube_struct, cutoff=7.5)
+    evals_all   = np.linalg.eigvalsh(H)
+    n_zero      = int(np.sum(np.abs(evals_all) < 1e-6))
+    check("Check 1: 6 rigid-body zero eigenvalues",
+          n_zero == 6,
+          f"got {n_zero} near-zero eigenvalues (|λ|<1e-6)")
+
+    # ── Check 2: principal axis is a unit vector ──────────────────────────────
+    anm_cube = build_anm(cube_struct, cutoff=7.5, n_modes=10)
+    ax = anm_principal_axis(anm_cube.eigenmodes, anm_cube.eigenvalues,
+                            'A', 1, anm_cube.residue_map)
+    check("Check 2: principal axis is unit vector",
+          ax is not None and abs(float(np.linalg.norm(ax)) - 1.0) < 1e-6,
+          f"norm = {np.linalg.norm(ax):.6f}" if ax is not None else "returned None")
+
+    # ── Check 3: analytical formula verification ──────────────────────────────
+    # Mock 2 residues, 2 non-trivial modes with known displacements:
+    #   Mode 0: residue 0 moves along x̂ (amplitude 1), λ=1
+    #   Mode 1: residue 0 moves along ŷ (amplitude 1), λ=2
+    # Expected D-A alignment along x for residue 0:
+    #   num   = (1/1)×1² + (1/2)×0² = 1.0
+    #   denom = (1/1) + (1/2)        = 1.5
+    #   score = 1.0 / 1.5 = 2/3
+    # D-A alignment along y for residue 0 should be 1/3 (by symmetry of formula)
+    mock_modes = np.zeros((2, 3, 2))
+    mock_modes[0, 0, 0] = 1.0   # residue 0, x-dir, mode 0
+    mock_modes[0, 1, 1] = 1.0   # residue 0, y-dir, mode 1
+    mock_evals = np.array([1.0, 2.0])
+    mock_rmap  = {('A', 1): 0, ('A', 2): 1}
+
+    score_x = anm_da_alignment(mock_modes, mock_evals, 'A', 1, mock_rmap,
+                                np.array([1.0, 0.0, 0.0]))
+    score_y = anm_da_alignment(mock_modes, mock_evals, 'A', 1, mock_rmap,
+                                np.array([0.0, 1.0, 0.0]))
+    expected_x = 2.0 / 3.0
+    expected_y = 1.0 / 3.0
+    check("Check 3: analytical D-A alignment formula",
+          abs(score_x - expected_x) < 1e-8 and abs(score_y - expected_y) < 1e-8,
+          f"score_x={score_x:.6f} (expected {expected_x:.6f}), "
+          f"score_y={score_y:.6f} (expected {expected_y:.6f})")
+
+    # ── Check 4: ANM B-factors show end-effect (terminal > interior) ──────────
+    # 20-residue helix; terminal residues have fewer contacts → larger fluctuations
+    t   = np.linspace(0.0, 4.0 * np.pi, 20)
+    hx  = 2.5 * np.cos(t)
+    hy  = 2.5 * np.sin(t)
+    hz  = 1.5 * t / (2.0 * np.pi) * 3.8   # 3.8 Å rise per turn
+    helix_res    = [_MockResidue('A', i+1, (hx[i], hy[i], hz[i]))
+                    for i in range(20)]
+    helix_struct = _MockStructure(helix_res)
+    anm_hx       = build_anm(helix_struct, cutoff=7.5, n_modes=15)
+
+    inv_lam = 1.0 / anm_hx.eigenvalues   # (n_modes,)
+    # B_i ∝ Σ_k (1/λ_k) ||u_k(i)||²
+    bfac = np.array([
+        float(np.einsum('k,mk,mk->', inv_lam,
+                        anm_hx.eigenmodes[i], anm_hx.eigenmodes[i]))
+        for i in range(20)
+    ])
+    # Terminal residues (first and last 3) should average higher than interior (8-12)
+    terminal_mean = float(np.mean([bfac[0], bfac[1], bfac[2],
+                                   bfac[17], bfac[18], bfac[19]]))
+    interior_mean = float(np.mean(bfac[8:13]))
+    check("Check 4: terminal residues have larger ANM B-factors than interior",
+          terminal_mean > interior_mean,
+          f"terminal_mean={terminal_mean:.4f}  interior_mean={interior_mean:.4f}")
+
+    print("─" * 60)
+    print(f"Results: {passed} passed, {failed} failed")
+    return failed == 0
+
+
+if __name__ == "__main__":
+    ok = _self_tests()
+    import sys
+    sys.exit(0 if ok else 1)

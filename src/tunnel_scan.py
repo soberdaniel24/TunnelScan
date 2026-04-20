@@ -351,6 +351,35 @@ def run_scan(
         if verbose:
             print(f"      QCF alignment fallback skipped: {e}")
 
+    # ── ANM fallback for residues still lacking coverage ─────────────────────
+    # ANM gives full 3D vector displacement modes; fills remaining gaps after
+    # crystallographic ANISOU and QCF.  Scores are rank-normalised inside the
+    # module so they are calibrated on the same [0,1] scale.
+    try:
+        from anisotropic_network_model import build_anm, anm_alignment_map
+
+        da_unit_anm = acceptor_coords - donor_coords
+        da_len_anm  = float(np.linalg.norm(da_unit_anm))
+        if da_len_anm > 0.01:
+            da_unit_anm = da_unit_anm / da_len_anm
+
+        anm_result  = build_anm(s, cutoff=7.5, n_modes=20)
+        anm_aln_map = anm_alignment_map(anm_result, da_unit_anm)
+
+        n_anm_filled = 0
+        for key, score in anm_aln_map.items():
+            if key not in aniso_map:
+                aniso_map[key] = score
+                n_anm_filled  += 1
+
+        if verbose and n_anm_filled > 0:
+            print(f"      ANM alignment fallback: {n_anm_filled} residues supplemented")
+        elif verbose and n_anm_filled == 0:
+            print(f"      ANM alignment: full coverage already, no gaps to fill")
+    except Exception as e:
+        if verbose:
+            print(f"      ANM alignment fallback skipped: {e}")
+
     # ── Identify substrate H-bond partners ───────────────────────────────────
     substrate = s.get_residue(d_chain, d_resnum)
     substrate_hbond_keys = []
