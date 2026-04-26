@@ -352,33 +352,31 @@ def run_scan(
             print(f"      QCF alignment fallback skipped: {e}")
 
     # ── ANM fallback for residues still lacking coverage ─────────────────────
-    # ANM gives full 3D vector displacement modes; fills remaining gaps after
-    # crystallographic ANISOU and QCF.  Scores are rank-normalised inside the
-    # module so they are calibrated on the same [0,1] scale.
+    # ANM predicts fluctuation MAGNITUDES well (bfactor_r≈0.38) but NOT
+    # directions (pearson_r≈-0.17 vs ANISOU).  When this fires, scores encode
+    # "how mobile is this residue" rather than "does it move along D-A."
+    # Logged as a warning so the user knows directional data is unavailable.
     try:
-        from anisotropic_network_model import build_anm, anm_alignment_map
+        from anisotropic_network_model import build_anm, anm_bfactor_map
 
-        da_unit_anm = acceptor_coords - donor_coords
-        da_len_anm  = float(np.linalg.norm(da_unit_anm))
-        if da_len_anm > 0.01:
-            da_unit_anm = da_unit_anm / da_len_anm
-
-        anm_result  = build_anm(s, cutoff=7.5, n_modes=20)
-        anm_aln_map = anm_alignment_map(anm_result, da_unit_anm)
+        anm_result   = build_anm(s, cutoff=7.5, n_modes=20)
+        anm_mag_map  = anm_bfactor_map(anm_result)
 
         n_anm_filled = 0
-        for key, score in anm_aln_map.items():
+        for key, score in anm_mag_map.items():
             if key not in aniso_map:
                 aniso_map[key] = score
                 n_anm_filled  += 1
 
         if verbose and n_anm_filled > 0:
-            print(f"      ANM alignment fallback: {n_anm_filled} residues supplemented")
+            print(f"      ANM magnitude fallback: {n_anm_filled} residues supplemented")
+            print(f"      WARNING: ANM scores encode fluctuation magnitude only —")
+            print(f"               directional D-A alignment data unavailable for these residues")
         elif verbose and n_anm_filled == 0:
-            print(f"      ANM alignment: full coverage already, no gaps to fill")
+            print(f"      ANM fallback: full coverage already, no gaps to fill")
     except Exception as e:
         if verbose:
-            print(f"      ANM alignment fallback skipped: {e}")
+            print(f"      ANM fallback skipped: {e}")
 
     # ── Identify substrate H-bond partners ───────────────────────────────────
     substrate = s.get_residue(d_chain, d_resnum)
