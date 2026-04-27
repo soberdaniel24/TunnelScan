@@ -2,7 +2,7 @@
 █████████████████████████████████████████████████████████████████
   TUNNELSCAN REPORT
 █████████████████████████████████████████████████████████████████
-  Generated: 2026-04-20 21:39
+  Generated: 2026-04-27 21:12
   Enzyme:    AADH (Alcaligenes faecalis) + tryptamine
   PDB:       2AGW
   Residues scanned:      74
@@ -381,6 +381,6 @@
 █████████████████████████████████████████████████████████████████
   END OF REPORT
 █████████████████████████████████████████████████████████████████
-  TunnelScan v0.1 | 2026-04-20 21:39
+  TunnelScan v0.1 | 2026-04-27 21:12
   Bell correction model. For quantitative accuracy, use PIMD (CP2K).
   Novel predictions require experimental validation.
