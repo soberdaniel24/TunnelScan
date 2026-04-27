@@ -322,6 +322,7 @@ def run_scan(
     # For any residue near the D-A axis that has no entry in aniso_map
     # (coverage gap, different crystal form, novel enzyme), substitute the
     # QCF zero-point amplitude proxy from quantum_conformational_field.
+    qcf_result = None   # hoisted so tunnelling_network block can reference it
     try:
         from quantum_conformational_field import (
             build_quantum_propagator, replace_anisou_with_qcf
@@ -378,6 +379,26 @@ def run_scan(
         if verbose:
             print(f"      ANM fallback skipped: {e}")
 
+    # ── Tunnelling network (Module 9) ────────────────────────────────────────
+    # Build the quantum tunnelling network topology: W_ij = sqrt(P_i P_j) × A_i A_j × Q_ij
+    # Requires QCF (must be built with structure= so ca_coords is populated).
+    tunnelling_network = None
+    if qcf_result is not None:
+        try:
+            from tunnelling_network import build_tunnelling_network
+            tunnelling_network = build_tunnelling_network(
+                enm, qcf_result, aniso_map, donor_coords, acceptor_coords
+            )
+            if verbose:
+                tn = tunnelling_network
+                top_bt = sorted(tn.betweenness.items(), key=lambda x: x[1], reverse=True)[:3]
+                top_str = '  '.join(f"{k[0]}{k[1]}={v:.3f}" for k, v in top_bt)
+                print(f"      Tunnelling network: {len(tn.nodes)} nodes  "
+                      f"λ₂={tn.fiedler_value:.4f}  top_betweenness: {top_str}")
+        except Exception as e:
+            if verbose:
+                print(f"      Tunnelling network skipped: {e}")
+
     # ── Identify substrate H-bond partners ───────────────────────────────────
     substrate = s.get_residue(d_chain, d_resnum)
     substrate_hbond_keys = []
@@ -396,6 +417,7 @@ def run_scan(
         substrate_hbond_residue_keys=substrate_hbond_keys,
         anisotropic_alignment_map=aniso_map,
         stochastic_model=stochastic_model,
+        tunnelling_network=tunnelling_network,
         donor_chain    =d_chain,
         donor_resnum   =d_resnum,
         donor_atom     =d_atom,

@@ -49,6 +49,7 @@ from breathing import compute_breathing_contribution, BreathingResult, AA_RIGIDI
 from electrostatics import ElectrostaticsMap, build_electrostatics_map
 from bayesian_uncertainty import BayesianConfidence
 from stochastic_tunnelling import StochasticDA
+from tunnelling_network import TunnellingNetworkResult
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -189,6 +190,13 @@ class MutationScore:
     gpr_delta:          float = 0.0   # sparse GP regression correction (post-GNN)
     gpr_variance:       float = 0.0   # GPR posterior uncertainty (ln(KIE))²
 
+    # Topological fields — populated when TunnelScorer has a tunnelling_network
+    tunnelling_betweenness: float = 0.0           # fraction of max-weight paths through i
+    spectral_sensitivity:   float = 0.0           # |Δλ₂| on full disruption
+    effective_resistance:   float = float('inf')  # resistance to D-A reference node
+    tunnelling_community:   int   = -1            # spectral community label
+    topological_delta:      float = 0.0           # -κ × B_i × disruption → ln(KIE)
+
     # Bayesian uncertainty — populated after scan completes via
     # bayesian_uncertainty.add_bayesian_confidence(); None until then.
     bayes: Optional[BayesianConfidence] = None
@@ -234,6 +242,8 @@ class TunnelScorer:
         substrate_hbond_residue_keys: Optional[List] = None,
         anisotropic_alignment_map: Optional[dict] = None,
         stochastic_model: Optional[StochasticDA] = None,
+        tunnelling_network: Optional[TunnellingNetworkResult] = None,
+        kappa_topo:     float = 0.0,   # topological coupling; 0 = uncalibrated (safe default)
         donor_chain:   str = 'A',
         donor_resnum:  int = 1,
         donor_atom:    str = 'CA',
@@ -255,6 +265,8 @@ class TunnelScorer:
         self.substrate_hbond_keys = set(substrate_hbond_residue_keys or [])
         self.aniso_map = anisotropic_alignment_map or {}
         self.stochastic_model = stochastic_model
+        self.tunnelling_network = tunnelling_network
+        self.kappa_topo = kappa_topo
         self.elec_map: Optional[ElectrostaticsMap] = None  # built on first use
 
     def _dynamic_importance(self, res) -> float:
@@ -628,12 +640,33 @@ class TunnelScorer:
         else:
             stochastic_delta = 0.0
 
+        # ── Topological network component ─────────────────────────────────────
+        topo_betweenness  = 0.0
+        topo_sensitivity  = 0.0
+        topo_resistance   = float('inf')
+        topo_community    = -1
+        topo_delta        = 0.0
+
+        if self.tunnelling_network is not None:
+            tn = self.tunnelling_network
+            key = (residue.chain, residue.number)
+            topo_betweenness = tn.get_betweenness(residue.chain, residue.number)
+            topo_resistance  = tn.get_effective_resistance(residue.chain, residue.number)
+            topo_community   = tn.get_community(residue.chain, residue.number)
+            net_disruption   = disruption if disruption > 0 else abs(delta_rigidity) * 0.5
+            topo_sensitivity = tn.spectral_sensitivity(
+                residue.chain, residue.number, net_disruption)
+            topo_delta       = tn.topological_delta(
+                residue.chain, residue.number, net_disruption,
+                kappa=self.kappa_topo)
+
         # ── Total prediction ──────────────────────────────────────────────────
         total_delta   = (static_delta
                         + self.beta * dynamic_delta
                         + self.gamma * breathing_delta
                         + elec_delta
-                        + stochastic_delta)
+                        + stochastic_delta
+                        + topo_delta)
         ln_kie_pred   = np.log(self.wt_kie) + total_delta
         predicted_kie = float(np.exp(np.clip(ln_kie_pred, 0.0, 8.0)))
         fold_vs_wt    = predicted_kie / self.wt_kie
@@ -698,5 +731,10 @@ class TunnelScorer:
             breathing_mechanism=breath.mechanism,
             is_novel=is_novel_prediction(label),
             experimental_kie=exp_kie,
-            prediction_error=pred_err
+            prediction_error=pred_err,
+            tunnelling_betweenness=topo_betweenness,
+            spectral_sensitivity=topo_sensitivity,
+            effective_resistance=topo_resistance,
+            tunnelling_community=topo_community,
+            topological_delta=topo_delta,
         )
