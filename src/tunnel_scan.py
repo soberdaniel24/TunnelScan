@@ -127,8 +127,9 @@ class ScanResult:
     wt_kie_predicted: float
     wt_kie_exp:       float
 
-    all_scores:       List[MutationScore]
-    double_mutant_scores: List = field(default_factory=list)
+    all_scores:             List[MutationScore]
+    double_mutant_scores:   List = field(default_factory=list)
+    topological_candidates: List[MutationScore] = field(default_factory=list)
 
     @property
     def novel_scores(self) -> List[MutationScore]:
@@ -597,6 +598,82 @@ def run_scan(
         if verbose:
             print(f"  Bayesian UQ skipped: {e}")
         result.bayes_model = None
+
+    # ── Distal topological scan ───────────────────────────────────────────────
+    # Score mutations at high-betweenness network nodes that fall OUTSIDE the
+    # geometric scan radius.  These are topological bottlenecks — every
+    # max-weight tunnelling path in W_ij passes through them, yet they are
+    # invisible to a distance-only scan.  The DHFR analogue is G121 (found
+    # at 19Å from the active site via ENM network coupling).
+    if tunnelling_network is not None:
+        try:
+            scanned_keys   = {(sc.chain, sc.residue_number) for sc in all_scores}
+            catalytic_keys = set(config.catalytic_residues)
+            top_bt = sorted(tunnelling_network.betweenness.items(),
+                            key=lambda x: x[1], reverse=True)
+
+            DISTAL_BETWEENNESS_CUTOFF = 0.50   # top fraction of network bottlenecks
+            distal_scores = []
+
+            for (chain, resnum), bt in top_bt:
+                if bt < DISTAL_BETWEENNESS_CUTOFF:
+                    break
+                if (chain, resnum) in scanned_keys:
+                    continue
+                if (chain, resnum) in catalytic_keys:
+                    continue
+                res = s.get_residue(chain, resnum)
+                if res is None:
+                    continue
+                ca = res.ca_coords
+                if ca is None:
+                    continue
+
+                # Axis distance (perpendicular distance from D-A line)
+                axis_vec = acceptor_coords - donor_coords
+                axis_len = float(np.linalg.norm(axis_vec))
+                if axis_len < 0.01:
+                    continue
+                axis_hat = axis_vec / axis_len
+                to_ca    = ca - donor_coords
+                proj     = float(np.dot(to_ca, axis_hat))
+                perp     = to_ca - proj * axis_hat
+                dist     = float(np.linalg.norm(perp))
+
+                side = 'donor' if proj < axis_len / 2 else 'acceptor'
+                candidates = SUBSTITUTION_CANDIDATES.get(res.name, ['ALA'])
+                for new_aa in candidates:
+                    if new_aa == res.name:
+                        continue
+                    sc = scorer.score_mutation(res, new_aa, side, dist)
+                    distal_scores.append(sc)
+
+            distal_scores.sort(key=lambda x: x.tunnelling_betweenness, reverse=True)
+            result.topological_candidates = distal_scores
+
+            if verbose and distal_scores:
+                print(f"\n{'─'*65}")
+                print(f"  DISTAL TOPOLOGICAL CANDIDATES  "
+                      f"(betweenness ≥ {DISTAL_BETWEENNESS_CUTOFF}, outside {config.scan_radius}Å)")
+                print(f"  {len({sc.residue_number for sc in distal_scores})} residues  "
+                      f"({len(distal_scores)} mutations)")
+                print(f"  {'Mutation':<10}  {'Betweenness':>12}  {'Comm':>5}  "
+                      f"{'KIE_pred':>9}  {'Mechanism':<10}")
+                printed = set()
+                for sc in distal_scores[:15]:
+                    key = (sc.chain, sc.residue_number)
+                    if key in printed:
+                        continue
+                    printed.add(key)
+                    bt  = sc.tunnelling_betweenness
+                    comm = sc.tunnelling_community
+                    print(f"  {sc.label:<10}  {bt:>12.3f}  {comm:>5}  "
+                          f"{sc.predicted_kie:>9.1f}  {sc.dominant_mechanism:<10}")
+                print(f"{'─'*65}")
+
+        except Exception as e:
+            if verbose:
+                print(f"  Distal topological scan skipped: {e}")
 
     return result
 

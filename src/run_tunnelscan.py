@@ -87,14 +87,46 @@ def main():
     print(f"\n  Full report saved: {report_path}")
     print("★"*65)
 
-    # ── Step 5: Double mutant predictions ────────────────────────────────────
+    # ── Step 5: Distal topological candidates ────────────────────────────────
+    if result.topological_candidates:
+        print("\n" + "="*65)
+        print("  DISTAL TOPOLOGICAL CANDIDATES")
+        print("  High-betweenness network bottlenecks outside geometric scan")
+        print("="*65)
+        seen = set()
+        rows = []
+        for sc in result.topological_candidates:
+            key = (sc.chain, sc.residue_number)
+            if key not in seen:
+                seen.add(key)
+                rows.append(sc)
+        rows.sort(key=lambda x: x.tunnelling_betweenness, reverse=True)
+        print(f"\n  {'Residue':<8} {'Betweenness':>12}  {'Top mutation':>13}  "
+              f"{'KIE':>7}  {'Mechanism':<10}")
+        print(f"  {'─'*58}")
+        for sc in rows[:10]:
+            top_mut = max(
+                [m for m in result.topological_candidates
+                 if m.chain == sc.chain and m.residue_number == sc.residue_number],
+                key=lambda x: x.predicted_kie
+            )
+            print(f"  {sc.orig_aa}{sc.residue_number} ({sc.chain})   "
+                  f"{sc.tunnelling_betweenness:>12.3f}  "
+                  f"{top_mut.label:>13}  "
+                  f"{top_mut.predicted_kie:>7.1f}  "
+                  f"{top_mut.dominant_mechanism:<10}")
+        print(f"\n  These residues are network bottlenecks identified by quantum")
+        print(f"  tunnelling network topology — not reachable by geometry alone.")
+        print("="*65)
+
+    # ── Step 6: Double mutant predictions ────────────────────────────────────
     if result.double_mutant_scores:
         print_double_mutant_report(
             result.double_mutant_scores,
             wt_kie=result.wt_kie_predicted
         )
 
-    # ── Step 6: Temperature dependence predictions ────────────────────────
+    # ── Step 7: Temperature dependence predictions ────────────────────────
     top_novel = result.top_enhancing[:15]
     if top_novel:
         temp_preds = [
