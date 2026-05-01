@@ -50,6 +50,7 @@ from electrostatics import ElectrostaticsMap, build_electrostatics_map
 from bayesian_uncertainty import BayesianConfidence
 from stochastic_tunnelling import StochasticDA
 from tunnelling_network import TunnellingNetworkResult
+from sidechain_library import best_rotamer_profile, sidechain_da_profile
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -310,173 +311,6 @@ class TunnelScorer:
                 self._da_unit_cached = np.array([0.0, 0.0, 1.0])
         return self._da_unit_cached
 
-    def _sidechain_da_proj(self, residue: Residue) -> float:
-        """
-        Mean projection of WT residue's sidechain heavy atoms onto D-A unit
-        vector, measured from CA.  Returns 0.0 for GLY or missing atoms.
-        """
-        ca = residue.ca_coords
-        if ca is None:
-            return 0.0
-        sc = residue.sidechain_heavy
-        if not sc:
-            return 0.0
-        da = self._da_unit
-        return float(np.mean([np.dot(a.coords - ca, da) for a in sc]))
-
-    def _canonical_sidechain_da_proj(self, aa_new: str, residue: Residue) -> float:
-        """
-        Mean projection of the canonical aa_new sidechain onto D-A, anchored
-        at the WT residue's actual CA/CB crystal position.
-
-        The first sidechain atom is placed at the same χ1 dihedral as the WT
-        residue's first sidechain atom — preserving the backbone rotamer well.
-        Additional atoms use canonical (tetrahedral) gauche+ geometry.
-        """
-        ca_atom = residue.atoms.get('CA')
-        if ca_atom is None:
-            return 0.0
-        ca  = ca_atom.coords
-        da  = self._da_unit
-
-        if aa_new == 'GLY':
-            return 0.0
-
-        cb_atom = residue.atoms.get('CB')
-        if cb_atom is None:
-            # WT is GLY — place CB at CA + 1.52 Å along D-A (rough approximation)
-            cb = ca + 1.52 * da
-        else:
-            cb = cb_atom.coords
-
-        if aa_new == 'ALA':
-            return float(np.dot(cb - ca, da))
-
-        # Build local frame: z = CA→CB, x from N-CA plane, y = z × x
-        z = cb - ca
-        z = z / float(np.linalg.norm(z))
-
-        n_atom = residue.atoms.get('N')
-        if n_atom is not None:
-            ref = ca - n_atom.coords
-            rl  = float(np.linalg.norm(ref))
-            if rl > 1e-6:
-                ref = ref / rl
-                x   = ref - np.dot(ref, z) * z
-                xl  = float(np.linalg.norm(x))
-                x   = x / xl if xl > 1e-6 else self._arbitrary_perp(z)
-            else:
-                x = self._arbitrary_perp(z)
-        else:
-            x = self._arbitrary_perp(z)
-        y = np.cross(z, x)
-
-        # χ1 of WT residue — the first sidechain atom's angle in the CB local frame
-        chi1 = self._wt_chi1(residue, cb, z, x, y)
-
-        # Canonical atom positions for aa_new using that χ1
-        extra = self._canonical_atoms(aa_new, cb, z, x, y, chi1)
-
-        all_pos = [cb] + extra
-        return float(np.mean([np.dot(p - ca, da) for p in all_pos]))
-
-    @staticmethod
-    def _arbitrary_perp(z: np.ndarray) -> np.ndarray:
-        ref = np.array([1.0, 0.0, 0.0]) if abs(z[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
-        x   = ref - np.dot(ref, z) * z
-        return x / float(np.linalg.norm(x))
-
-    @staticmethod
-    def _wt_chi1(residue: Residue, cb: np.ndarray,
-                 z: np.ndarray, x: np.ndarray, y: np.ndarray) -> float:
-        """
-        Compute the χ1 dihedral angle (in degrees) from the WT residue's
-        first sidechain heavy atom, expressed in the CB local frame.
-        Defaults to 60° (gauche+) if atom is absent.
-        """
-        FIRST_SC: Dict[str, str] = {
-            'THR':'OG1','SER':'OG', 'CYS':'SG', 'VAL':'CG1',
-            'ILE':'CG1','LEU':'CG', 'MET':'CG', 'PHE':'CG',
-            'TYR':'CG', 'TRP':'CG', 'HIS':'CG', 'ASP':'CG',
-            'GLU':'CG', 'ASN':'CG', 'GLN':'CG', 'LYS':'CG',
-            'ARG':'CG', 'PRO':'CG',
-        }
-        aname = FIRST_SC.get(residue.name)
-        if not aname:
-            return 60.0
-        atom = residue.atoms.get(aname)
-        if atom is None:
-            return 60.0
-        vec = atom.coords - cb
-        return float(np.degrees(np.arctan2(float(np.dot(vec, y)),
-                                           float(np.dot(vec, x)))))
-
-    @staticmethod
-    def _canonical_atoms(aa: str, cb: np.ndarray,
-                         z: np.ndarray, x: np.ndarray, y: np.ndarray,
-                         chi1: float) -> List[np.ndarray]:
-        """
-        Canonical heavy atom positions for residue type aa, beyond CB.
-        Uses tetrahedral branch angle (70.5° from CA→CB z-axis) and the
-        supplied χ1 for the first branch; further atoms extend linearly.
-        """
-        TET = np.radians(70.5)   # supplement of 109.5° tetrahedral angle
-
-        def branch(blen: float, chi_deg: float) -> np.ndarray:
-            r   = blen * np.sin(TET)
-            dz  = blen * np.cos(TET)
-            chi = np.radians(chi_deg)
-            return cb + dz * z + r * (np.cos(chi) * x + np.sin(chi) * y)
-
-        def extend(prev: np.ndarray, prev_prev: np.ndarray,
-                   blen: float) -> np.ndarray:
-            d = prev - prev_prev
-            return prev + blen * d / float(np.linalg.norm(d))
-
-        if aa == 'SER':
-            return [branch(1.43, chi1)]
-        if aa == 'CYS':
-            return [branch(1.82, chi1)]
-        if aa == 'THR':
-            # OG1 at χ1; CG2 at χ1-120° in local frame
-            # (local-frame offset is -120°, corresponding to +120° in standard
-            # N-CA-CB-X dihedral space — verified against T172 crystal data)
-            return [branch(1.43, chi1), branch(1.52, chi1 - 120.0)]
-        if aa == 'VAL':
-            # CG1 at χ1, CG2 at χ1-120° (same convention as THR)
-            return [branch(1.52, chi1), branch(1.52, chi1 - 120.0)]
-        if aa in ('ILE', 'LEU'):
-            cg = branch(1.52, chi1)
-            cd = extend(cg, cb, 1.52)
-            return [cg, cd]
-        if aa == 'MET':
-            cg = branch(1.52, chi1)
-            sd = extend(cg, cb, 1.82)
-            ce = extend(sd, cg, 1.82)
-            return [cg, sd, ce]
-        if aa in ('ASP', 'ASN'):
-            cg = branch(1.52, chi1)
-            return [cg, extend(cg, cb, 1.25)]
-        if aa in ('GLU', 'GLN'):
-            cg = branch(1.52, chi1)
-            cd = extend(cg, cb, 1.52)
-            return [cg, cd, extend(cd, cg, 1.25)]
-        if aa in ('PHE', 'TYR', 'HIS', 'TRP'):
-            cg = branch(1.52, chi1)
-            cd = extend(cg, cb, 1.40)
-            return [cg, cd, extend(cd, cg, 1.40)]
-        if aa == 'LYS':
-            cg = branch(1.52, chi1)
-            cd = extend(cg, cb, 1.52)
-            ce = extend(cd, cg, 1.52)
-            return [cg, cd, ce, extend(ce, cd, 1.47)]
-        if aa == 'ARG':
-            cg = branch(1.52, chi1)
-            cd = extend(cg, cb, 1.52)
-            ne = extend(cd, cg, 1.47)
-            return [cg, cd, ne, extend(ne, cd, 1.35)]
-        return []
-
     def score_mutation(
         self,
         residue:      Residue,
@@ -491,44 +325,63 @@ class TunnelScorer:
         label   = f"{orig_1}{residue.number}{new_1}"
 
         # ── Static component ──────────────────────────────────────────────────
-        # Compute actual per-atom projection of WT and mutant sidechains onto
-        # the D-A unit vector.  The WT uses crystal-structure atom positions;
-        # the mutant uses canonical tetrahedral geometry anchored at the actual
-        # CA/CB, with χ1 inherited from the WT rotamer (the backbone rotamer
-        # well is preserved across isosteric substitutions).
+        # vdW-weighted sidechain projection onto the D-A axis.
         #
-        # This replaces the volume proxy and eliminates branch_factor —
-        # Val's γ-methyls branch at χ1 and χ1+120°, so they naturally project
-        # less along D-A than Thr's OG1 when OG1 is pointed at the acceptor.
+        # WT:  crystal atom positions via Residue.da_projection_profile
+        # Mut: canonical geometry from sidechain_library.best_rotamer_profile —
+        #      tries all Dunbrack top-3 χ1 rotamers, returns the one that
+        #      maximises Σ(w_i × p_i); physically correct upper bound on
+        #      geometric compression (active site selects the best-coupling conf.)
         #
-        # Coupling constant: every 1 Å of sidechain projection change causes
-        # ~2% compression/elongation of the D-A coordinate.  Physically
-        # motivated by protein cavity compressibility (~1-5% per Å at active
-        # sites); calibrated so T172A ≈ 7.4 matches experiment.
-        GEOM_COUPLING = 0.02   # Å_DA / Å_sidechain_projection
+        # Sign is automatic: if the WT sidechain's weighted_projection is negative
+        # (points away from acceptor), ALA gives proj_change > 0 → da_change < 0
+        # → D-A shortens → static > 0 ✓.  Donor-side backstops (positive proj_orig)
+        # give da_change > 0 on removal → static < 0 ✓.  No conditional flip needed.
+        #
+        # GEOM_COUPLING: every 1 Å weighted-projection change → X Å D-A change.
+        # Fitted to T172 series (LOO grid search); physically motivated by protein
+        # cavity compressibility (1-5% per Å, Warshel & Levitt 1976).
+        GEOM_COUPLING = 0.016  # Å_DA / Å_sidechain_weighted_projection (LOO grid optimum)
 
-        vol_orig    = AA_VOLUME.get(orig_aa, 120.0)
-        vol_new     = AA_VOLUME.get(new_aa,  120.0)
-        vol_change  = vol_new - vol_orig          # retained for diagnostics only
+        vol_orig   = AA_VOLUME.get(orig_aa, 120.0)
+        vol_new    = AA_VOLUME.get(new_aa,  120.0)
+        vol_change = vol_new - vol_orig            # diagnostic only
 
-        proj_orig   = self._sidechain_da_proj(residue)
-        proj_new    = self._canonical_sidechain_da_proj(new_aa, residue)
-        proj_change = proj_new - proj_orig        # Å, positive = reaches further along D-A
+        # WT projection: actual crystal atoms, vdW-weighted
+        d_atom = self.structure.get_atom(
+            self.donor_chain, self.donor_resnum, self.donor_atom)
+        a_atom = self.structure.get_atom(
+            self.acceptor_chain, self.acceptor_resnum, self.acceptor_atom)
+        donor_c    = d_atom.coords if d_atom else np.zeros(3)
+        acceptor_c = a_atom.coords if a_atom else np.array([0., 0., 2.87])
+
+        wt_prof    = residue.da_projection_profile(donor_c, acceptor_c)
+        proj_orig  = wt_prof['weighted_projection']
+
+        # Mutant projection: best Dunbrack rotamer, vdW-weighted
+        ca_atom = residue.atoms.get('CA')
+        cb_atom = residue.atoms.get('CB')
+        n_atom  = residue.atoms.get('N')
+        if ca_atom is None:
+            proj_new = 0.0
+        else:
+            ca = ca_atom.coords
+            # For GLY→X: place CB at CA + 1.52 Å along D-A as fallback
+            cb = cb_atom.coords if cb_atom is not None else ca + 1.52 * self._da_unit
+            nc = n_atom.coords  if n_atom  is not None else None
+            if new_aa == 'GLY':
+                proj_new = 0.0
+            else:
+                mut_prof = best_rotamer_profile(new_aa, ca, cb, nc, donor_c, acceptor_c)
+                proj_new = mut_prof['weighted_projection']
+
+        proj_change = proj_new - proj_orig    # Å, positive = mutant reaches further
 
         # Axis-distance weighting: residues off the D-A line couple less strongly
-        axis_scale = float(np.exp(-((axis_distance - 2.0)**2) / (2*3.0**2)))
+        axis_scale = float(np.exp(-((axis_distance - 2.0)**2) / (2 * 3.0**2)))
         axis_scale = float(np.clip(axis_scale, 0.1, 1.0))
 
-        # Physical sign: sidechain projecting toward the reaction partner compresses
-        # the D-A coordinate.  Less projection (proj_change > 0) → D-A shortens
-        # → da_change < 0.  The negation handles both donor-side and acceptor-side
-        # residues correctly without any separate sign correction:
-        #   acceptor-side residue reaching back toward donor (proj_orig < 0):
-        #     ALA replaces → proj_change > 0 → da_change < 0 → D-A shortens → static > 0 ✓
-        #   donor-side backstop reaching toward acceptor (proj_orig > 0):
-        #     ALA replaces → proj_change < 0 → da_change > 0 → D-A lengthens → static < 0 ✓
-        da_change = -proj_change * GEOM_COUPLING * axis_scale
-
+        da_change    = -proj_change * GEOM_COUPLING * axis_scale
         static_delta = -ALPHA_H * da_change   # positive when D-A shortens
 
         # ── Dynamic component ─────────────────────────────────────────────────

@@ -78,6 +78,37 @@ class Residue:
     def polar_atoms(self) -> List[Atom]:
         return [a for a in self.atoms.values() if a.element in ('N','O','S')]
 
+    def da_projection_profile(
+        self,
+        donor_coords:    'np.ndarray',
+        acceptor_coords: 'np.ndarray',
+    ) -> dict:
+        """
+        vdW-weighted D-A projection profile using the actual crystal atom positions.
+
+        Each sidechain heavy atom (including CB) contributes:
+          p_i  = (r_i − donor) · d̂_DA
+          d⊥_i = distance from the D-A line
+          w_i  = r_vdW × exp(−d⊥² / 8 Å²)   (σ = 2 Å Gaussian decay)
+
+        For GLY (no sidechain), uses Cα only.
+        Returns a dict from sidechain_library.sidechain_da_profile.
+        """
+        from sidechain_library import sidechain_da_profile
+
+        atoms = self.sidechain_heavy
+        if not atoms:
+            ca = self.ca
+            if ca is None:
+                return {'weighted_projection': 0.0, 'steric_sum': 0.0,
+                        'steric_weight_total': 0.0, 'max_projection': 0.0,
+                        'n_atoms': 0, 'atom_details': []}
+            atom_list = [('CA', ca.coords, ca.element or 'C')]
+        else:
+            atom_list = [(a.name, a.coords, a.element or 'C') for a in atoms]
+
+        return sidechain_da_profile(atom_list, donor_coords, acceptor_coords)
+
     def __str__(self):
         return f"{self.name}{self.number}{self.chain}"
 
