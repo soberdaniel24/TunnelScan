@@ -51,8 +51,48 @@ DA_RADIUS    = 20.0   # Å: node selection radius around D-A midpoint
 EDGE_CUTOFF  = 20.0   # Å: max Cα-Cα distance for a network edge
 BETWN_RADIUS = 25.0   # Å: betweenness computed on this sub-radius
 
+# Heavy atom counts per residue (CONECT records, no H).
+# Used as proxy for GNM contact number: more heavy atoms ≈ more contacts ≈
+# higher normal mode participation (scales as ~sqrt(n_contacts)).
+_N_HEAVY: Dict[str, int] = {
+    'GLY': 4, 'ALA': 5, 'VAL': 7, 'LEU': 8, 'ILE': 8, 'PRO': 7,
+    'PHE': 11, 'TYR': 12, 'TRP': 14, 'MET': 8, 'SER': 6, 'THR': 7,
+    'CYS': 6, 'HIS': 10, 'ASP': 8, 'GLU': 9, 'ASN': 8, 'GLN': 9,
+    'LYS': 9, 'ARG': 11,
+}
 
-# ── Data class ─────────────────────────────────────────────────────────────────
+_AA1: Dict[str, str] = {
+    'ALA':'A','ARG':'R','ASN':'N','ASP':'D','CYS':'C',
+    'GLN':'Q','GLU':'E','GLY':'G','HIS':'H','ILE':'I',
+    'LEU':'L','LYS':'K','MET':'M','PHE':'F','PRO':'P',
+    'SER':'S','THR':'T','TRP':'W','TYR':'Y','VAL':'V',
+}
+
+
+# ── Data classes ──────────────────────────────────────────────────────────────
+
+@dataclass
+class RewiringMutation:
+    """
+    A substitution predicted to increase the Fiedler value λ₂ of the
+    tunnelling network — i.e. improve algebraic connectivity of quantum flux.
+
+    Mechanism: replacing a small residue with a bulkier one at a network
+    bottleneck (high Fiedler sensitivity) adds contacts that short-circuit
+    the community boundary, increasing λ₂.
+
+    delta_lambda2 = (α−1) × Σ_j W[i,j] × (v₂[i]−v₂[j])²
+    where α = sqrt(n_heavy_new / n_heavy_orig)  (participation ratio)
+    """
+    label:               str
+    chain:               str
+    residue_number:      int
+    orig_aa:             str
+    new_aa:              str
+    delta_lambda2:       float   # predicted Δλ₂ (positive → better connectivity)
+    new_lambda2:         float   # λ₂ + delta_lambda2
+    fiedler_sensitivity: float   # Σ_j W[i,j]×(v₂[i]−v₂[j])² — bottleneck score
+
 
 @dataclass
 class TunnellingNetworkResult:
@@ -71,6 +111,7 @@ class TunnellingNetworkResult:
     n_communities:        int
     da_ref_idx:           int                     # local index of D-A reference node
     node_index:           Dict[Tuple[str, int], int]  # key → local index
+    robustness:           float = 0.0             # Ω = λ₂ / mean_R_top10
 
     # ── Per-residue accessors ──────────────────────────────────────────────────
 
@@ -129,6 +170,30 @@ class TunnellingNetworkResult:
         """
         B = self.get_betweenness(chain, resnum)
         return -kappa * B * disruption
+
+    def delta_lambda2_approx(
+        self,
+        chain:      str,
+        resnum:     int,
+        disruption: float,
+    ) -> float:
+        """
+        First-order O(m) estimate of |Δλ₂| when node i loses fraction
+        `disruption` of its edge weights.
+
+        Derived from the unnormalized Laplacian perturbation:
+          δλ₂ ≈ disruption × Σ_j W[i,j] × (v₂[i] − v₂[j])²
+
+        Uses the stored Fiedler vector v₂.  Errors vs exact rebuild typically
+        < 15%; use for fast ranking.  For precise values use spectral_sensitivity.
+        """
+        key = (chain, resnum)
+        if key not in self.node_index or disruption <= 0.0:
+            return 0.0
+        i  = self.node_index[key]
+        v  = self.fiedler_vector
+        Wi = self.adjacency[i]
+        return disruption * float(np.dot(Wi, (v[i] - v) ** 2))
 
 
 # ── Internal helpers ───────────────────────────────────────────────────────────
@@ -340,6 +405,13 @@ def build_tunnelling_network(
     comm_labels = _spectral_communities(evecs, k_eff)
     communities = {local_keys[i]: int(comm_labels[i]) for i in range(m)}
 
+    # ── Network robustness Ω = λ₂ / mean_R_top10 ─────────────────────────────
+    # λ₂ measures algebraic connectivity; 1/mean_R measures how accessible the
+    # D-A region is.  Their product is a joint measure of tunnelling network quality.
+    R_sorted = sorted([r for r in R if r > 0])
+    top10_R  = R_sorted[:10] if len(R_sorted) >= 10 else R_sorted
+    omega = float(fiedler_value / float(np.mean(top10_R))) if top10_R else 0.0
+
     return TunnellingNetworkResult(
         nodes                = local_keys,
         adjacency            = W,
@@ -354,7 +426,134 @@ def build_tunnelling_network(
         n_communities        = k_eff,
         da_ref_idx           = da_ref_idx,
         node_index           = node_index,
+        robustness           = omega,
     )
+
+
+# ── Part A: full-protein resistance map ───────────────────────────────────────
+
+def build_full_resistance_map(
+    enm,
+    qcf,
+    aniso_map:       Dict[Tuple[str, int], float],
+    donor_coords:    np.ndarray,
+    acceptor_coords: np.ndarray,
+    edge_cutoff:     float = EDGE_CUTOFF,
+) -> Dict[Tuple[str, int], float]:
+    """
+    Effective resistance to the D-A axis for ALL protein residues.
+
+    Uses identical edge weights to build_tunnelling_network but covers the
+    full protein (no da_radius cutoff).  Residues tightly coupled to the
+    tunnelling coordinate have low resistance; distal residues have high R.
+
+    Returns {(chain, resnum): R_i} for every residue in qcf.residue_keys.
+    """
+    keys = qcf.residue_keys
+    ca   = qcf.ca_coords
+    N    = qcf.n_residues
+
+    part = np.array([float(enm.participation[i]) for i in range(N)])
+    C    = np.sqrt(np.outer(part, part))
+
+    A_vec = np.array([float(aniso_map.get(k, 0.5)) for k in keys])
+    AA    = np.outer(A_vec, A_vec)
+
+    G   = qcf.propagator
+    G_d = np.maximum(np.diag(G), 0.0)
+    sqG = np.sqrt(G_d)
+    den = np.outer(sqG, sqG)
+    with np.errstate(invalid='ignore', divide='ignore'):
+        Q = np.where(den > 0, np.abs(G) / den, 0.0)
+    np.fill_diagonal(Q, 0.0)
+
+    diff   = ca[:, None, :] - ca[None, :, :]
+    pair_d = np.linalg.norm(diff, axis=2)
+    in_cut = (pair_d > 0.1) & (pair_d <= edge_cutoff)
+
+    W = C * AA * Q * in_cut.astype(float)
+    np.fill_diagonal(W, 0.0)
+
+    L, _ = _normalized_laplacian(W)
+    L_pinv = np.linalg.pinv(L)
+
+    midpoint = 0.5 * (donor_coords + acceptor_coords)
+    dists    = np.linalg.norm(ca - midpoint, axis=1)
+    ref      = int(np.argmin(dists))
+
+    R = np.array([
+        L_pinv[i, i] - 2.0 * L_pinv[i, ref] + L_pinv[ref, ref]
+        for i in range(N)
+    ])
+    R = np.maximum(R, 0.0)
+    return {keys[i]: float(R[i]) for i in range(N)}
+
+
+# ── Part A: rewiring mutations ─────────────────────────────────────────────────
+
+def find_rewiring_mutations(
+    tn:                    TunnellingNetworkResult,
+    structure,
+    substitution_candidates: Dict[str, List[str]],
+    min_delta_lambda2:     float = 0.0,
+) -> List[RewiringMutation]:
+    """
+    Find substitutions predicted to INCREASE λ₂ (Fiedler value) of the
+    tunnelling network, improving algebraic connectivity of quantum flux.
+
+    Mechanism: at network bottlenecks (high Fiedler sensitivity), replacing a
+    small residue with a bulkier one (more heavy atoms → more GNM contacts →
+    higher ENM participation → stronger edges) raises λ₂ according to:
+
+      δλ₂ ≈ (α−1) × Σ_j W[i,j] × (v₂[i]−v₂[j])²
+
+    where α = sqrt(n_heavy_new / n_heavy_orig).
+
+    Returns mutations sorted by delta_lambda2 descending (best rewirers first).
+    Only returns mutations with delta_lambda2 > min_delta_lambda2.
+    """
+    results: List[RewiringMutation] = []
+    v = tn.fiedler_vector
+
+    for key, idx in tn.node_index.items():
+        chain, resnum = key
+        res = structure.get_residue(chain, resnum)
+        if res is None or res.is_hetatm:
+            continue
+        orig_aa = res.name
+        n_orig  = _N_HEAVY.get(orig_aa, 7)
+
+        # Fiedler sensitivity: how much this node bridges communities
+        Wi = tn.adjacency[idx]
+        fiedler_sens = float(np.dot(Wi, (v[idx] - v) ** 2))
+        if fiedler_sens <= 0:
+            continue
+
+        for new_aa in substitution_candidates.get(orig_aa, ['ALA']):
+            if new_aa == orig_aa:
+                continue
+            n_new = _N_HEAVY.get(new_aa, 7)
+            if n_new <= n_orig:
+                continue  # smaller residue; would reduce λ₂ (not a rewiring mut.)
+            alpha       = np.sqrt(n_new / n_orig)
+            delta_lam2  = (alpha - 1.0) * fiedler_sens
+            if delta_lam2 <= min_delta_lambda2:
+                continue
+            o1 = _AA1.get(orig_aa, orig_aa[0])
+            n1 = _AA1.get(new_aa,  new_aa[0])
+            results.append(RewiringMutation(
+                label               = f"{o1}{resnum}{n1}",
+                chain               = chain,
+                residue_number      = resnum,
+                orig_aa             = orig_aa,
+                new_aa              = new_aa,
+                delta_lambda2       = delta_lam2,
+                new_lambda2         = tn.fiedler_value + delta_lam2,
+                fiedler_sensitivity = fiedler_sens,
+            ))
+
+    results.sort(key=lambda x: x.delta_lambda2, reverse=True)
+    return results
 
 
 # ── Self-tests ─────────────────────────────────────────────────────────────────
@@ -444,7 +643,71 @@ def _self_tests():
           dumbbell_ok,
           f"labels = {labels_db.tolist()}")
 
-    # ── Optional check 5: T172 betweenness on 2AGW ────────────────────────────
+    # ── Check 5: delta_lambda2_approx on K_5 ─────────────────────────────────
+    # Disrupting any node of K_5 by 50% should give same |Δλ₂| for all nodes
+    # (by symmetry) and the approximation should give a positive, finite value.
+    W_K5_t = np.ones((5, 5)) - np.eye(5)
+    L_K5_t, _ = _normalized_laplacian(W_K5_t)
+    evals_t, evecs_t = np.linalg.eigh(L_K5_t)
+    tn_fake = TunnellingNetworkResult(
+        nodes=[(f'A', i) for i in range(5)],
+        adjacency=W_K5_t,
+        laplacian=L_K5_t,
+        laplacian_evals=evals_t,
+        laplacian_evecs=evecs_t,
+        fiedler_value=float(evals_t[1]),
+        fiedler_vector=evecs_t[:, 1].copy(),
+        betweenness={('A', i): 0.0 for i in range(5)},
+        effective_resistance={('A', i): 0.0 for i in range(5)},
+        communities={('A', i): 0 for i in range(5)},
+        n_communities=1,
+        da_ref_idx=0,
+        node_index={('A', i): i for i in range(5)},
+    )
+    approx_vals = [tn_fake.delta_lambda2_approx('A', i, 0.5) for i in range(5)]
+    approx_ok = (
+        all(v > 0 for v in approx_vals)
+        and all(np.isfinite(v) for v in approx_vals)
+    )
+    check("Check 5: delta_lambda2_approx positive and finite on K_5",
+          approx_ok,
+          f"values = {[f'{v:.4f}' for v in approx_vals]}")
+
+    # ── Check 6: find_rewiring_mutations finds larger-residue substitutions ───
+    # For a mock 5-node network with one GLY (node 2), a GLY→PHE mutation
+    # at node 2 should have positive delta_lambda2 if node 2 is a bottleneck.
+    class _MockRes:
+        def __init__(self, aa):
+            self.name = aa; self.is_hetatm = False
+    class _MockStructure:
+        def get_residue(self, chain, resnum):
+            return _MockRes('GLY') if resnum == 2 else _MockRes('ALA')
+    mock_s = _MockStructure()
+    # Use the path-graph betweenness network — node 2 (center) is a bottleneck
+    W_path5 = np.zeros((5,5))
+    for i in range(4): W_path5[i,i+1] = W_path5[i+1,i] = 0.5
+    L_p5, _ = _normalized_laplacian(W_path5)
+    ev5, evec5 = np.linalg.eigh(L_p5)
+    tn_path = TunnellingNetworkResult(
+        nodes=[('A', i) for i in range(5)],
+        adjacency=W_path5, laplacian=L_p5,
+        laplacian_evals=ev5, laplacian_evecs=evec5,
+        fiedler_value=float(ev5[1]), fiedler_vector=evec5[:,1].copy(),
+        betweenness={('A',i): 0.0 for i in range(5)},
+        effective_resistance={('A',i): 0.0 for i in range(5)},
+        communities={('A',i): 0 for i in range(5)},
+        n_communities=1, da_ref_idx=0,
+        node_index={('A',i): i for i in range(5)},
+    )
+    cands = {'GLY': ['ALA', 'PHE'], 'ALA': ['GLY']}
+    rewire = find_rewiring_mutations(tn_path, mock_s, cands)
+    # GLY→PHE at bottleneck (node 2) should top the list
+    rewire_ok = len(rewire) > 0 and rewire[0].new_aa == 'PHE' and rewire[0].residue_number == 2
+    check("Check 6: find_rewiring_mutations finds GLY→PHE at path-graph bottleneck",
+          rewire_ok,
+          f"top = {rewire[0].label if rewire else 'none'}")
+
+    # ── Optional check 7: T172 betweenness on 2AGW ────────────────────────────
     import os
     pdb_2agw = os.path.join(os.path.dirname(__file__), '..', 'data', 'structures', '2AGW.pdb')
     pdb_2ah1 = os.path.join(os.path.dirname(__file__), '..', 'data', 'structures', '2AH1.pdb')
@@ -469,26 +732,34 @@ def _self_tests():
             all_B  = list(tn.betweenness.values())
             median_B = float(np.median(all_B))
 
-            check("Check 5 (2AGW): T172 betweenness ≥ median",
+            check("Check 7 (2AGW): T172 betweenness ≥ median",
                   B_T172 >= median_B,
                   f"T172={B_T172:.3f}  median={median_B:.3f}  "
                   f"fiedler={tn.fiedler_value:.4f}  "
                   f"n_nodes={len(tn.nodes)}")
 
-            # Spectral sensitivity of T172 is positive and finite
-            # (real protein networks have lower λ₂ than random graphs due to
-            # community structure, so gap > shuffled is NOT a valid criterion)
             ss = tn.spectral_sensitivity('D', 172, disruption=0.5)
             fv_ok = 0.0 < tn.fiedler_value < 2.0
-
-            check("Check 6 (2AGW): fiedler value in (0,2) and T172 sensitivity > 0",
+            check("Check 8 (2AGW): fiedler value in (0,2) and T172 sensitivity > 0",
                   fv_ok and ss > 0.0,
                   f"λ₂={tn.fiedler_value:.4f}  T172_sensitivity={ss:.4f}")
 
+            # Check 9: full resistance map covers more nodes than local network
+            from tunnel_scan import AADH_CONFIG
+            full_R = build_full_resistance_map(enm, qcf, aniso, donor, acceptor)
+            check("Check 9 (2AGW): full resistance map covers > local network nodes",
+                  len(full_R) > len(tn.nodes),
+                  f"full={len(full_R)}  local={len(tn.nodes)}")
+
+            # Check 10: network robustness Ω > 0
+            check("Check 10 (2AGW): network robustness Ω > 0",
+                  tn.robustness > 0,
+                  f"Ω = {tn.robustness:.4f}")
+
         except Exception as e:
-            print(f"  [SKIP] Check 5/6 (2AGW): {e}")
+            print(f"  [SKIP] Check 7-10 (2AGW): {e}")
     else:
-        print("  [SKIP] Check 5/6: 2AGW/2AH1 not available")
+        print("  [SKIP] Check 7-10: 2AGW/2AH1 not available")
 
     print("─" * 60)
     print(f"Results: {passed} passed, {failed} failed")

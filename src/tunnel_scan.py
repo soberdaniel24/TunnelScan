@@ -131,6 +131,11 @@ class ScanResult:
     double_mutant_scores:   List = field(default_factory=list)
     topological_candidates: List[MutationScore] = field(default_factory=list)
 
+    # Part A: network topology maps
+    full_resistance_map:    Dict = field(default_factory=dict)   # (chain,resnum)→R_i all protein
+    rewiring_mutations:     List = field(default_factory=list)   # List[RewiringMutation]
+    network_robustness:     float = 0.0                          # Ω = λ₂/mean_R_top10
+
     @property
     def novel_scores(self) -> List[MutationScore]:
         return [s for s in self.all_scores if s.is_novel]
@@ -674,6 +679,49 @@ def run_scan(
         except Exception as e:
             if verbose:
                 print(f"  Distal topological scan skipped: {e}")
+
+    # ── Part A: full resistance map + rewiring mutations ─────────────────────
+    if tunnelling_network is not None and qcf_result is not None:
+        try:
+            from tunnelling_network import (
+                build_full_resistance_map, find_rewiring_mutations
+            )
+            full_R = build_full_resistance_map(
+                enm, qcf_result, aniso_map, donor_coords, acceptor_coords
+            )
+            result.full_resistance_map = full_R
+            result.network_robustness  = tunnelling_network.robustness
+
+            rewire = find_rewiring_mutations(
+                tunnelling_network, s, SUBSTITUTION_CANDIDATES
+            )
+            result.rewiring_mutations = rewire
+
+            if verbose:
+                print(f"\n{'─'*65}")
+                print(f"  PART A: NETWORK TOPOLOGY")
+                print(f"  Ω (robustness) = {tunnelling_network.robustness:.4f}  "
+                      f"λ₂ = {tunnelling_network.fiedler_value:.4f}")
+                print(f"  Full resistance map: {len(full_R)} residues")
+                # Print 5 most connected (lowest R) protein residues
+                prot_R = [(k, v) for k, v in full_R.items()
+                          if not s.get_residue(*k) or not s.get_residue(*k).is_hetatm]
+                prot_R.sort(key=lambda x: x[1])
+                print(f"  Most D-A-coupled residues (lowest R):")
+                for (ch, rn), r in prot_R[:5]:
+                    res = s.get_residue(ch, rn)
+                    aa  = res.name if res else '???'
+                    print(f"    {aa}{rn}({ch})  R={r:.4f}")
+                if rewire:
+                    print(f"  Top rewiring mutations (Δλ₂ > 0):")
+                    print(f"  {'Mutation':<10} {'Δλ₂':>8}  {'new_λ₂':>8}  {'sensitivity':>12}")
+                    for rm in rewire[:8]:
+                        print(f"  {rm.label:<10} {rm.delta_lambda2:>8.4f}  "
+                              f"{rm.new_lambda2:>8.4f}  {rm.fiedler_sensitivity:>12.4f}")
+                print(f"{'─'*65}")
+        except Exception as e:
+            if verbose:
+                print(f"  Part A network analysis skipped: {e}")
 
     return result
 

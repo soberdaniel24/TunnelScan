@@ -119,7 +119,56 @@ def main():
         print(f"  tunnelling network topology — not reachable by geometry alone.")
         print("="*65)
 
-    # ── Step 6: Double mutant predictions ────────────────────────────────────
+    # ── Step 6: Part A — Network robustness + rewiring mutations ─────────────
+    if result.network_robustness > 0 or result.full_resistance_map:
+        print("\n" + "="*65)
+        print("  PART A: TUNNELLING NETWORK TOPOLOGY")
+        print("="*65)
+
+        print(f"\n  Network robustness  Ω = {result.network_robustness:.4f}")
+        print(f"  (Ω = λ₂ / mean_R_top10; higher = better-connected quantum flux path)")
+
+        if result.full_resistance_map:
+            from pdb_parser import Structure
+            import os
+            pdb_path = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                '..', 'data', 'structures', '2AGW.pdb')
+            try:
+                s_temp = Structure(pdb_path)
+                prot_R = [
+                    (k, v) for k, v in result.full_resistance_map.items()
+                    if not (s_temp.get_residue(*k) and s_temp.get_residue(*k).is_hetatm)
+                ]
+                prot_R.sort(key=lambda x: x[1])
+                print(f"\n  Full-protein effective resistance to D-A axis ({len(prot_R)} residues)")
+                print(f"  Most tightly coupled (lowest R):")
+                print(f"  {'Residue':<12} {'R_i':>8}")
+                print(f"  {'─'*22}")
+                for (ch, rn), r in prot_R[:10]:
+                    res = s_temp.get_residue(ch, rn)
+                    aa  = res.name if res else '???'
+                    print(f"  {aa}{rn}({ch})    {r:>8.4f}")
+                print(f"\n  Most distal from D-A (highest R):")
+                for (ch, rn), r in prot_R[-5:][::-1]:
+                    res = s_temp.get_residue(ch, rn)
+                    aa  = res.name if res else '???'
+                    print(f"  {aa}{rn}({ch})    {r:>8.4f}")
+            except Exception:
+                pass
+
+        if result.rewiring_mutations:
+            print(f"\n  Rewiring mutations (substitutions that increase λ₂):")
+            print(f"  {'Mutation':<10}  {'Δλ₂':>8}  {'new_λ₂':>8}  {'F-sens':>10}")
+            print(f"  {'─'*42}")
+            for rm in result.rewiring_mutations[:12]:
+                print(f"  {rm.label:<10}  {rm.delta_lambda2:>8.4f}  "
+                      f"{rm.new_lambda2:>8.4f}  {rm.fiedler_sensitivity:>10.4f}")
+            print(f"\n  These mutations are predicted to improve quantum flux")
+            print(f"  connectivity without necessarily changing active-site geometry.")
+        print("="*65)
+
+    # ── Step 7: Double mutant predictions ────────────────────────────────────
     if result.double_mutant_scores:
         print_double_mutant_report(
             result.double_mutant_scores,
