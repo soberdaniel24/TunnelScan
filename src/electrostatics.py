@@ -44,11 +44,11 @@ Reference:
 
 import numpy as np
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
+from typing import Dict, Tuple
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from pdb_parser import Structure, Residue
+from pdb_parser import Structure
 
 
 # ── Constants ─────────────────────────────────────────────────────────────────

@@ -61,7 +61,7 @@ Benkovic & Hammes-Schiffer (2003) Science 301:1196. — DHFR dynamic network
 
 import numpy as np
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Dict
+from typing import List, Optional, Tuple
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 

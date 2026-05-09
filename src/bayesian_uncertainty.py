@@ -94,10 +94,9 @@ Johannissen LO et al (2007) FEBS J 278:1701.
 """
 
 import numpy as np
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Tuple, Optional
 import scipy.stats
-from scipy.special import logsumexp
 
 
 # ── Physical prior parameters ─────────────────────────────────────────────────
