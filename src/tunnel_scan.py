@@ -136,6 +136,9 @@ class ScanResult:
     rewiring_mutations:     List = field(default_factory=list)   # List[RewiringMutation]
     network_robustness:     float = 0.0                          # Ω = λ₂/mean_R_top10
 
+    # Part B: stored for cross-enzyme comparison
+    tunnelling_network:     Optional[object] = None              # TunnellingNetworkResult
+
     @property
     def novel_scores(self) -> List[MutationScore]:
         return [s for s in self.all_scores if s.is_novel]
@@ -174,6 +177,57 @@ DHFR_CONFIG = ActiveSiteConfig(
     catalytic_residues=[('A', 161), ('A', 164)],
     scan_radius=10.0,
     wt_kie_exp=6.8,
+)
+
+# ── Part B enzyme configs ────────────────────────────────────────────────────
+
+MADH_CONFIG = ActiveSiteConfig(
+    name='MADH (P. denitrificans) + methylamine',
+    pdb_id='2BBK',
+    # TTQ cofactor: Trp108 (substrate imine adduct) and Trp57 (quinone O5).
+    # Both in the light (beta, chain L) subunit.  The C-H bond that breaks is
+    # the Cα-H of methylamine; H transfers to O5 of TTQ.  Using Cα as proxy
+    # since TTQ atoms vary by modification state in the PDB ATOM record.
+    # Scrutton/Hay lab KIE at 298 K: 15.8 (direct H-transfer measurement).
+    donor=('L', 108, 'CA'),
+    acceptor=('L', 57, 'CA'),
+    barrier_height_kcal=14.0,
+    imaginary_freq_cm1=950.0,
+    catalytic_residues=[('L', 57), ('L', 108)],
+    scan_radius=8.0,
+    wt_kie_exp=15.8,
+)
+
+MR_CONFIG = ActiveSiteConfig(
+    name='Morphinone reductase (P. putida M10)',
+    pdb_id='1GWJ',
+    # NADH C4H → FMN N5 hydride transfer (old yellow enzyme mechanism).
+    # 1GWJ is the substrate-free oxidised form; NADH is absent.
+    # His186 and Tyr183 bracket FMN N5 in the OYE-family active site.
+    # Hay et al. (2009) PNAS: KIE = 7.1 at 298 K.
+    donor=('A', 186, 'CA'),
+    acceptor=('A', 183, 'CA'),
+    barrier_height_kcal=13.0,
+    imaginary_freq_cm1=1200.0,
+    catalytic_residues=[('A', 183), ('A', 186)],
+    scan_radius=8.0,
+    wt_kie_exp=7.1,
+)
+
+htADH_CONFIG = ActiveSiteConfig(
+    name='ht-ADH (Thermus thermophilus)',
+    pdb_id='1RJW',
+    # Zinc-dependent ADH: alcohol C1-H → NAD+ C4N hydride transfer.
+    # Active-site zinc coordinated by Cys43, His67, Cys153, Glu68 (Tm numbering).
+    # Zinc-bound Cys43 positions the alcohol; Tyr168 is the proton relay.
+    # Klinman group KIE at 298 K: ~5 (Liang & Klinman 2004; Kohen lab data).
+    donor=('A', 43, 'CA'),     # Cys43 — substrate-binding zinc ligand
+    acceptor=('A', 67, 'CA'),  # His67 — zinc coordination / proton relay
+    barrier_height_kcal=13.4,
+    imaginary_freq_cm1=1100.0,
+    catalytic_residues=[('A', 43), ('A', 67), ('A', 153)],
+    scan_radius=8.0,
+    wt_kie_exp=5.0,
 )
 
 def run_scan(
@@ -689,8 +743,9 @@ def run_scan(
             full_R = build_full_resistance_map(
                 enm, qcf_result, aniso_map, donor_coords, acceptor_coords
             )
-            result.full_resistance_map = full_R
-            result.network_robustness  = tunnelling_network.robustness
+            result.full_resistance_map  = full_R
+            result.network_robustness   = tunnelling_network.robustness
+            result.tunnelling_network   = tunnelling_network
 
             rewire = find_rewiring_mutations(
                 tunnelling_network, s, SUBSTITUTION_CANDIDATES
