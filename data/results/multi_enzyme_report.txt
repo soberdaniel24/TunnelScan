@@ -1,0 +1,64 @@
+
+===========================================================================
+  PHYSICAL CEILING TABLE (Johannissen et al. J Phys Chem B 2007)
+===========================================================================
+  Enzyme        nu(cm-1)   mu(u)  dr_max(A)   Ceil/mut   KIE_WT   KIE_ceil
+  -------------------------------------------------------------------------
+  AADH                90   6.857     0.0356      2.52x     55.0      138.7
+  MADH                85   6.857     0.0377      2.66x     15.8       42.1
+  MR                  70   6.000     0.0489      3.57x      7.1       25.3
+  htADH               60   6.000     0.0570      4.41x      5.0       22.0
+  DHFR                50   6.000     0.0685      5.93x      3.5       20.8
+  SLO                 40   6.857     0.0800      8.01x     36.0      288.5
+===========================================================================
+
+======================================================================
+  PART B: CROSS-ENZYME TUNNELLING NETWORK COMPARISON
+======================================================================
+
+  Enzyme                                PDB    WT KIE        λ₂         Ω   nodes
+  ─────────────────────────────────────────────────────────────────
+  AADH (Alcaligenes faecalis) + trypt  2AGW      55.0    0.1737    0.0883     182
+  MADH (P. denitrificans) + methylami  2BBK      15.8    0.1522    0.0779     151
+  Morphinone reductase (P. putida M10  1GWJ       7.1    0.1420    0.0716     197
+  ht-ADH (Thermus thermophilus)        1RJW       5.0    0.2466    0.1255     176
+  DHFR (E. coli) + NADP+/folate        1RX2       6.8    0.1344    0.0674     130
+  SLO-1 (Glycine max)                  3PZW      36.0    0.1281    0.0653     175
+
+  λ₂ vs WT KIE correlation  (n=6):
+    Pearson  r = -0.166  p = 0.753
+    Spearman ρ = -0.200
+  Ω vs WT KIE:
+    Pearson  r = -0.157  p = 0.767
+
+  Top betweenness residues per enzyme (network bottlenecks):
+  ──────────────────────────────────────────────────
+  2AGW:  LEU87(D)=1.000  HIS80(D)=0.895  THR172(D)=0.815
+  2BBK:  ALA112(L)=1.000  SER56(L)=0.869  ASN104(L)=0.668
+  1GWJ:  LEU17(A)=1.000  ALA227(A)=0.929  SER60(A)=0.923
+  1RJW:  TYR114(A)=1.000  ILE85(A)=0.980  ALA121(A)=0.720
+  1RX2:  ILE50(A)=1.000  TRP22(A)=0.854  GLY15(A)=0.741
+  3PZW:  ALA549(A)=1.000  ILE547(A)=0.490  SER263(A)=0.389
+
+  Structural equivalents of AADH distal candidates
+  (ranked by betweenness rank + D-A side; purely topological):
+  ────────────────────────────────────────────────────────────
+
+  Reference: L87 (AADH top bottleneck, donor-side)  (rank=1.000, side=donor)
+    2BBK: ALA112(L)  B=1.000  side=donor  Δ=0.000
+    1GWJ: LEU264(A)  B=0.764  side=donor  Δ=0.236
+    1RJW: TYR114(A)  B=1.000  side=donor  Δ=0.000
+    1RX2: GLY15(A)  B=0.741  side=donor  Δ=0.259
+    3PZW: ALA549(A)  B=1.000  side=acceptor  Δ=0.300
+
+  Reference: V175 (AADH distal acceptor-side)  (rank=0.525, side=acceptor)
+    2BBK: LEU71(L)  B=0.627  side=acceptor  Δ=0.102
+    1GWJ: VAL40(A)  B=0.568  side=acceptor  Δ=0.043
+    1RJW: THR335(A)  B=0.528  side=acceptor  Δ=0.003
+    1RX2: PHE31(A)  B=0.397  side=acceptor  Δ=0.128
+    3PZW: ILE547(A)  B=0.490  side=acceptor  Δ=0.035
+
+  Highest WT KIE:        2AGW (55.0)
+  Highest λ₂:            1RJW (0.2466)
+  Highest Ω (robustness):1RJW (0.1255)
+======================================================================

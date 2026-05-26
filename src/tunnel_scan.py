@@ -67,6 +67,10 @@ class ActiveSiteConfig:
     # Wild-type experimental KIE for validation
     wt_kie_exp:          float = 55.0
 
+    # Physical ceiling parameters (Johannissen et al. J Phys Chem B 2007)
+    promoting_vibration_cm1: float = 90.0   # cm⁻¹  promoting vibration frequency
+    da_reduced_mass_u:       float = 6.857  # u      D-A pair reduced mass
+
 
 # ── Pre-configured enzyme systems ────────────────────────────────────────────
 
@@ -90,6 +94,8 @@ AADH_CONFIG = ActiveSiteConfig(
 
     scan_radius=8.0,
     wt_kie_exp=55.0,
+    promoting_vibration_cm1=90.0,
+    da_reduced_mass_u=6.857,
 )
 
 # 2IUQ: dithionite-reduced AADH with tryptamine covalently bound (TSS adduct).
@@ -177,6 +183,8 @@ DHFR_CONFIG = ActiveSiteConfig(
     catalytic_residues=[('A', 161), ('A', 164)],
     scan_radius=10.0,
     wt_kie_exp=6.8,
+    promoting_vibration_cm1=50.0,
+    da_reduced_mass_u=6.000,
 )
 
 # ── Part B enzyme configs ────────────────────────────────────────────────────
@@ -196,6 +204,8 @@ MADH_CONFIG = ActiveSiteConfig(
     catalytic_residues=[('L', 57), ('L', 108)],
     scan_radius=8.0,
     wt_kie_exp=15.8,
+    promoting_vibration_cm1=85.0,
+    da_reduced_mass_u=6.857,
 )
 
 MR_CONFIG = ActiveSiteConfig(
@@ -212,6 +222,8 @@ MR_CONFIG = ActiveSiteConfig(
     catalytic_residues=[('A', 183), ('A', 186)],
     scan_radius=8.0,
     wt_kie_exp=7.1,
+    promoting_vibration_cm1=70.0,
+    da_reduced_mass_u=6.000,
 )
 
 htADH_CONFIG = ActiveSiteConfig(
@@ -228,6 +240,8 @@ htADH_CONFIG = ActiveSiteConfig(
     catalytic_residues=[('A', 43), ('A', 67), ('A', 153)],
     scan_radius=8.0,
     wt_kie_exp=5.0,
+    promoting_vibration_cm1=60.0,
+    da_reduced_mass_u=6.000,
 )
 
 def run_scan(
@@ -484,7 +498,14 @@ def run_scan(
         acceptor_chain =a_chain,
         acceptor_resnum=a_resnum,
         acceptor_atom  =a_atom,
+        promoting_vibration_cm1=getattr(config, 'promoting_vibration_cm1', 90.0),
+        da_reduced_mass_u=getattr(config, 'da_reduced_mass_u', 6.857),
+        temperature=getattr(config, 'temperature', 300.0),
     )
+
+    # Physical KIE ceiling for clamping post-processing corrections
+    import math as _math_ceil
+    _ln_kie_ceiling = _math_ceil.log(wt_result.predicted_KIE) + scorer.delta_r_max * 26.0
 
     # ── Find residues near D-A axis ───────────────────────────────────────────
     if verbose:
@@ -576,7 +597,7 @@ def run_scan(
                 sc.gnn_delta = gnn_r.gnn_delta
                 sc.total_delta += gnn_r.gnn_delta
                 ln_kie = math.log(sc.predicted_kie) + gnn_r.gnn_delta
-                sc.predicted_kie = float(math.exp(min(ln_kie, 8.0)))
+                sc.predicted_kie = float(math.exp(min(ln_kie, _ln_kie_ceiling)))
                 sc.fold_vs_wt    = sc.predicted_kie / wt_result.predicted_KIE
                 if sc.experimental_kie:
                     sc.prediction_error = abs(sc.predicted_kie - sc.experimental_kie) / sc.experimental_kie
@@ -619,7 +640,7 @@ def run_scan(
                     sc.gpr_variance = gpr_r.variance
                     sc.total_delta += gpr_r.gpr_delta
                     ln_kie = _math.log(sc.predicted_kie) + gpr_r.gpr_delta
-                    sc.predicted_kie  = float(_math.exp(min(ln_kie, 8.0)))
+                    sc.predicted_kie  = float(_math.exp(min(ln_kie, _ln_kie_ceiling)))
                     sc.fold_vs_wt     = sc.predicted_kie / wt_result.predicted_KIE
                     if sc.experimental_kie:
                         sc.prediction_error = (abs(sc.predicted_kie - sc.experimental_kie)

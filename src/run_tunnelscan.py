@@ -14,9 +14,11 @@ This is the command that generates novel scientific results.
 """
 
 import sys, os
+import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from tunnel_scan import run_scan, download_pdb, AADH_CONFIG
+from tunnel_score import compute_delta_r_max, ALPHA_H
 from report import generate_report, print_quick_summary
 from multi_mutation import print_double_mutant_report
 from temperature_dependence import predict_temperature_dependence, print_temperature_report
@@ -42,12 +44,37 @@ def main():
     else:
         print(f"Using existing structure: {pdb_path}")
 
+    # ── Physical ceiling header ───────────────────────────────────────────────
+    _delta_r_max = compute_delta_r_max(
+        AADH_CONFIG.promoting_vibration_cm1,
+        AADH_CONFIG.da_reduced_mass_u,
+        getattr(AADH_CONFIG, 'temperature', 300.0)
+    )
+    _kie_ceiling_fold = np.exp(ALPHA_H * _delta_r_max)
+    _kie_ceiling_abs  = AADH_CONFIG.wt_kie_exp * _kie_ceiling_fold
+    print(f"\nPhysical ceiling (derived from Johannissen et al. J Phys Chem B 2007):")
+    print(f"  Promoting vibration: {AADH_CONFIG.promoting_vibration_cm1:.1f} cm-1")
+    print(f"  D-A reduced mass: {AADH_CONFIG.da_reduced_mass_u:.3f} u  [C->O proton transfer]")
+    print(f"  Max D-A compression/mutation: {_delta_r_max:.3f} A  [= thermal amplitude at 300K]")
+    print(f"  Max KIE fold/mutation: {_kie_ceiling_fold:.1f}x  [= exp(ALPHA_H x {_delta_r_max:.3f})]")
+    print(f"  Physical KIE ceiling: {_kie_ceiling_abs:.0f}  [= WT x {_kie_ceiling_fold:.1f}x]")
+
     # ── Step 2: Run the scan ─────────────────────────────────────────────────
     result = run_scan(
         pdb_path=pdb_path,
         config=AADH_CONFIG,
         verbose=True
     )
+
+    # ── Physical ceiling assertion ────────────────────────────────────────────
+    delta_r_max   = compute_delta_r_max(AADH_CONFIG.promoting_vibration_cm1,
+                                        AADH_CONFIG.da_reduced_mass_u)
+    kie_ceiling   = result.wt_kie_predicted * np.exp(ALPHA_H * delta_r_max)
+    max_kie       = max(s.predicted_kie for s in result.all_scores)
+    assert max_kie <= kie_ceiling + 1e-6, (
+        f"Physical ceiling violated: max KIE {max_kie:.1f} > ceiling {kie_ceiling:.1f}"
+    )
+    print(f"\n  [ASSERT PASS] max KIE {max_kie:.1f} <= ceiling {kie_ceiling:.1f}")
 
     # ── Step 3: Print summary ─────────────────────────────────────────────────
     print_quick_summary(result)
@@ -130,7 +157,6 @@ def main():
 
         if result.full_resistance_map:
             from pdb_parser import Structure
-            import os
             pdb_path = os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
                 '..', 'data', 'structures', '2AGW.pdb')

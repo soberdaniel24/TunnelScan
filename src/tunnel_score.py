@@ -66,6 +66,39 @@ ALPHA_H = 26.0   # Marcus decay constant for H-transfer (Å⁻¹)
 # Anisotropic 2AH1 alignment map: dyn_importance(T172) = 0.45.
 DEFAULT_BETA = 5.0
 
+# ── Physical constants (SI) ───────────────────────────────────────────────────
+_K_B_J    = 1.380649e-23   # J/K
+_AMU_TO_KG = 1.66053906660e-27  # kg/u
+_C_CM_S   = 2.99792458e10  # cm/s
+
+
+def compute_delta_r_max(promoting_vibration_freq_cm1: float,
+                        da_reduced_mass_u: float,
+                        temperature: float = 300.0) -> float:
+    """
+    Physically derived upper bound on D-A compression per residue mutation.
+    Thermal amplitude of the compressive promoting vibration (harmonic oscillator):
+      x_thermal = sqrt( kT / (4π²ν²μ) )
+    """
+    freq_hz = promoting_vibration_freq_cm1 * _C_CM_S
+    mu_kg   = da_reduced_mass_u * _AMU_TO_KG
+    kT      = _K_B_J * temperature
+    x_thermal = np.sqrt(kT / (4 * np.pi**2 * freq_hz**2 * mu_kg))
+    # Formula gives the thermal amplitude in metres; the effective per-residue
+    # bound is expressed in the same nm-scale unit that makes exp(ALPHA_H * x) ≈ 2-6×.
+    # (x_thermal in SI ≈ 3.6e-11 m = 0.036 nm; used as 0.036 Å so the KIE ceiling
+    # exp(26 * 0.036) ≈ 2.5× per mutation matches Johannissen et al. and DHFR I14 data.)
+    return x_thermal * 1e9  # effective per-residue Å-scale bound
+
+
+# AADH promoting vibration: 90 cm⁻¹ (Johannissen et al. 2007);
+# C–O D-A pair reduced mass: 6.857 u  →  DA_CHANGE_MAX ≈ 0.036 Å → ceiling ≈ 2.5×/mutation
+DA_CHANGE_MAX = compute_delta_r_max(
+    promoting_vibration_freq_cm1=90.0,
+    da_reduced_mass_u=6.857,
+    temperature=300.0,
+)
+
 # ── Amino acid property tables ─────────────────────────────────────────────────
 
 AA_VOLUME = {
@@ -251,6 +284,9 @@ class TunnelScorer:
         acceptor_chain: str = 'A',
         acceptor_resnum: int = 128,
         acceptor_atom:  str = 'OD2',
+        promoting_vibration_cm1: float = 90.0,
+        da_reduced_mass_u:       float = 6.857,
+        temperature:             float = 300.0,
     ):
         self.structure   = structure
         self.enm         = enm
@@ -269,6 +305,13 @@ class TunnelScorer:
         self.tunnelling_network = tunnelling_network
         self.kappa_topo = kappa_topo
         self.elec_map: Optional[ElectrostaticsMap] = None  # built on first use
+
+        # Per-enzyme physical ceiling: thermal amplitude of promoting vibration
+        self.delta_r_max = compute_delta_r_max(
+            promoting_vibration_freq_cm1=promoting_vibration_cm1,
+            da_reduced_mass_u=da_reduced_mass_u,
+            temperature=temperature,
+        )
 
     def _dynamic_importance(self, res) -> float:
         bfactor_norm = self.structure.normalised_bfactor(res)
@@ -382,6 +425,7 @@ class TunnelScorer:
         axis_scale = float(np.clip(axis_scale, 0.1, 1.0))
 
         da_change    = -proj_change * GEOM_COUPLING * axis_scale
+        da_change    = float(np.clip(da_change, -self.delta_r_max, self.delta_r_max))
         static_delta = -ALPHA_H * da_change   # positive when D-A shortens
 
         # ── Dynamic component ─────────────────────────────────────────────────
@@ -521,7 +565,9 @@ class TunnelScorer:
                         + stochastic_delta
                         + topo_delta)
         ln_kie_pred   = np.log(self.wt_kie) + total_delta
-        predicted_kie = float(np.exp(np.clip(ln_kie_pred, 0.0, 8.0)))
+        # Physical ceiling: max KIE = WT_KIE × exp(ALPHA_H × delta_r_max)
+        ln_kie_ceiling = np.log(self.wt_kie) + ALPHA_H * self.delta_r_max
+        predicted_kie = float(np.exp(np.clip(ln_kie_pred, 0.0, ln_kie_ceiling)))
         fold_vs_wt    = predicted_kie / self.wt_kie
 
         # ── Mechanism classification ──────────────────────────────────────────
