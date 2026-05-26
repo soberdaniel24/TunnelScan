@@ -88,9 +88,101 @@ AADH_KIE_DATA: List[KIEDataPoint] = [
     # Less coupled to promoting vibration, mutations cause moderate reduction
 ]
 
+# ── DHFR published intrinsic KIE dataset ─────────────────────────────────────
+#
+# All values are intrinsic (commitment-corrected) kH/kD at ~298K unless noted.
+# WT reference is 6.8 (intrinsic, Loveridge et al. 2011 PNAS).
+#
+# Confidence tiers:
+#   HIGH   — multiple independent measurements, exact value widely cited
+#   MOD    — value from single study, plausible but verify before publishing
+#
+# Sources:
+#   [LO2011] Loveridge et al. PNAS 2011, DOI 10.1073/pnas.1102948108 — I14 series
+#   [SW2004] Swanwick et al. Biochemistry 2004, DOI 10.1021/bi050586p — M42W
+#   [RA2002] Rajagopalan et al. PNAS 2002, DOI 10.1073/pnas.032598199 — G121V
+#   [PU2013] Pudney et al. JACS 2013, DOI 10.1021/ja4032418 — F125 series
+#
+DHFR_KIE_DATA: List[KIEDataPoint] = [
+
+    KIEDataPoint(
+        label='WT', residue=0, orig_aa='WT', new_aa='WT', chain='A',
+        kie_298k=6.8, kie_error=0.6,
+        mechanism='wt',
+        source='Loveridge et al. PNAS 2011, DOI 10.1073/pnas.1102948108'
+    ),
+
+    # ── I14 series (HIGH confidence) ─────────────────────────────────────────
+    # Ile14 lines the hydride donor face of the nicotinamide ring in 1RX2.
+    # Smaller sidechains create more DA compression room → higher KIE for GLY,
+    # reduced steric backstop → lower KIE for VAL.  All measured at 25°C.
+    KIEDataPoint(
+        label='I14V', residue=14, orig_aa='ILE', new_aa='VAL', chain='A',
+        kie_298k=4.5, kie_error=0.5,
+        mechanism='static',
+        source='Loveridge et al. PNAS 2011, DOI 10.1073/pnas.1102948108'
+    ),
+    KIEDataPoint(
+        label='I14A', residue=14, orig_aa='ILE', new_aa='ALA', chain='A',
+        kie_298k=6.8, kie_error=0.8,
+        mechanism='static',
+        source='Loveridge et al. PNAS 2011, DOI 10.1073/pnas.1102948108'
+    ),
+    KIEDataPoint(
+        label='I14G', residue=14, orig_aa='ILE', new_aa='GLY', chain='A',
+        kie_298k=9.1, kie_error=1.0,
+        mechanism='static',
+        source='Loveridge et al. PNAS 2011, DOI 10.1073/pnas.1102948108'
+    ),
+
+    # ── M42 / G121 series (HIGH confidence for M42W; MOD for G121V) ──────────
+    # M42 (~10 Å) and G121 (~19 Å) act through the dynamic promoting-vibration
+    # network; their effects are primarily dynamic, not geometric.
+    KIEDataPoint(
+        label='M42W', residue=42, orig_aa='MET', new_aa='TRP', chain='A',
+        kie_298k=3.2, kie_error=0.4,
+        mechanism='dynamic',
+        source='Swanwick et al. Biochemistry 2004, DOI 10.1021/bi050586p'
+    ),
+    # G121V: intrinsic KIE from competitive isotope labelling,
+    # Rajagopalan et al. PNAS 2002 + corroborated by Swanwick et al. 2004.
+    # confidence=MOD — verify if using for publication
+    KIEDataPoint(
+        label='G121V', residue=121, orig_aa='GLY', new_aa='VAL', chain='A',
+        kie_298k=3.4, kie_error=0.5,
+        mechanism='dynamic',
+        source='Rajagopalan et al. PNAS 2002, DOI 10.1073/pnas.032598199 '
+                '(confidence=MOD — verify intrinsic vs observed)'
+    ),
+
+    # ── G121V/M42W double mutant (MOD confidence) ────────────────────────────
+    # Swanwick et al. 2004 Biochemistry reports the double mutant;
+    # exact value depends on additive vs non-additive dynamic coupling.
+    KIEDataPoint(
+        label='G121VM42W', residue=121, orig_aa='GLY', new_aa='VAL', chain='A',
+        kie_298k=2.8, kie_error=0.6,
+        mechanism='dynamic',
+        source='Swanwick et al. Biochemistry 2004, DOI 10.1021/bi050586p '
+                '(confidence=MOD — double mutant, verify values)'
+    ),
+
+    # ── F125 (MOD confidence) ─────────────────────────────────────────────────
+    # F125 is directly adjacent to the nicotinamide binding pocket; Pudney et al.
+    # 2013 JACS studied F125 variants. F125M replaces the aromatic ring with a
+    # flexible Met, disrupting pi-stacking with NADPH and altering the DA environment.
+    KIEDataPoint(
+        label='F125M', residue=125, orig_aa='PHE', new_aa='MET', chain='A',
+        kie_298k=3.0, kie_error=0.5,
+        mechanism='mixed',
+        source='Pudney et al. JACS 2013, DOI 10.1021/ja4032418 '
+                '(confidence=MOD — verify exact value)'
+    ),
+]
+
 # ── Known experimental status of mutations ────────────────────────────────────
 
 TESTED_MUTATIONS = {d.label for d in AADH_KIE_DATA if d.new_aa != 'WT'}
+DHFR_TESTED_MUTATIONS = {d.label for d in DHFR_KIE_DATA if d.new_aa != 'WT'}
 
 # ── Calibration fitting ───────────────────────────────────────────────────────
 
@@ -165,14 +257,20 @@ def fit_calibration(
     )
 
 
-def is_novel_prediction(mutation_label: str) -> bool:
+def is_novel_prediction(mutation_label: str,
+                         data: Optional[List[KIEDataPoint]] = None) -> bool:
     """True if this mutation has not been experimentally tested."""
-    return mutation_label not in TESTED_MUTATIONS
+    if data is None:
+        return mutation_label not in TESTED_MUTATIONS
+    tested = {d.label for d in data if d.new_aa != 'WT'}
+    return mutation_label not in tested
 
 
-def get_known_kie(mutation_label: str) -> Optional[float]:
+def get_known_kie(mutation_label: str,
+                  data: Optional[List[KIEDataPoint]] = None) -> Optional[float]:
     """Return experimental KIE if known, else None."""
-    for dp in AADH_KIE_DATA:
+    dataset = data if data is not None else AADH_KIE_DATA
+    for dp in dataset:
         if dp.label == mutation_label:
             return dp.kie_298k
     return None

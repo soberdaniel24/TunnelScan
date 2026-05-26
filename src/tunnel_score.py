@@ -121,12 +121,12 @@ THREE_TO_ONE = {
 }
 
 SUBSTITUTION_CANDIDATES: Dict[str, List[str]] = {
-    'PHE': ['ALA','VAL','LEU','ILE','GLY','SER'],
+    'PHE': ['ALA','VAL','LEU','ILE','GLY','SER','MET'],   # +MET: F125M in DHFR
     'TYR': ['PHE','ALA','VAL','LEU','SER','THR'],
     'TRP': ['PHE','LEU','ALA','HIS'],
     'ILE': ['ALA','VAL','GLY','LEU'],
     'LEU': ['ALA','VAL','GLY','ILE'],
-    'MET': ['ALA','VAL','LEU','ILE'],
+    'MET': ['ALA','VAL','LEU','ILE','TRP'],               # +TRP: M42W in DHFR
     'HIS': ['ALA','ASN','GLN','PHE'],
     'ASN': ['ALA','SER','THR','GLY','ASP'],
     'THR': ['ALA','VAL','SER','GLY','CYS'],
@@ -139,7 +139,7 @@ SUBSTITUTION_CANDIDATES: Dict[str, List[str]] = {
     'VAL': ['ALA','GLY','ILE'],
     'CYS': ['ALA','SER','THR'],
     'PRO': ['ALA','GLY'],
-    'GLY': ['ALA','SER'],
+    'GLY': ['ALA','SER','VAL'],                           # +VAL: G121V in DHFR
     'ALA': ['GLY','VAL','SER'],
 }
 
@@ -287,10 +287,23 @@ class TunnelScorer:
         promoting_vibration_cm1: float = 90.0,
         da_reduced_mass_u:       float = 6.857,
         temperature:             float = 300.0,
+        wt_kie_exp:              Optional[float] = None,
+        kie_data:                Optional[list]  = None,
     ):
         self.structure   = structure
         self.enm         = enm
-        self.wt_kie      = wt_tunnelling.predicted_KIE
+        bell_kie = wt_tunnelling.predicted_KIE
+        if wt_kie_exp is not None:
+            # Use experimental WT KIE as baseline so cross-enzyme predictions
+            # are not corrupted by Bell parameters calibrated on a different enzyme.
+            import logging
+            logging.getLogger(__name__).info(
+                f"Using experimental WT KIE={wt_kie_exp:.1f} as baseline "
+                f"(Bell predicted {bell_kie:.1f})"
+            )
+            self.wt_kie = wt_kie_exp
+        else:
+            self.wt_kie = bell_kie
         self.beta        = beta
         self.gamma       = gamma
         self.donor_chain    = donor_chain
@@ -305,6 +318,14 @@ class TunnelScorer:
         self.tunnelling_network = tunnelling_network
         self.kappa_topo = kappa_topo
         self.elec_map: Optional[ElectrostaticsMap] = None  # built on first use
+
+        # Per-enzyme KIE lookup overrides (default: AADH data from calibration.py)
+        if kie_data is not None:
+            self._get_known_kie  = lambda lbl: get_known_kie(lbl,  data=kie_data)
+            self._is_novel       = lambda lbl: is_novel_prediction(lbl, data=kie_data)
+        else:
+            self._get_known_kie  = get_known_kie
+            self._is_novel       = is_novel_prediction
 
         # Per-enzyme physical ceiling: thermal amplitude of promoting vibration
         self.delta_r_max = compute_delta_r_max(
@@ -597,7 +618,7 @@ class TunnelScorer:
             0.15, 1.0))
         confidence   = float(np.clip(axis_conf * mech_conf * change_conf, 0.0, 1.0))
 
-        exp_kie  = get_known_kie(label)
+        exp_kie  = self._get_known_kie(label)
         pred_err = (abs(predicted_kie - exp_kie)/exp_kie
                     if exp_kie is not None else None)
 
@@ -628,7 +649,7 @@ class TunnelScorer:
             stochastic_delta=stochastic_delta,
             gnn_delta=0.0,   # populated by apply_gnn_corrections() in tunnel_scan
             breathing_mechanism=breath.mechanism,
-            is_novel=is_novel_prediction(label),
+            is_novel=self._is_novel(label),
             experimental_kie=exp_kie,
             prediction_error=pred_err,
             tunnelling_betweenness=topo_betweenness,

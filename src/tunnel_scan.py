@@ -28,7 +28,7 @@ from elastic_network import build_gnm
 from tunnelling_model import bell_correction
 from tunnel_score import TunnelScorer, SUBSTITUTION_CANDIDATES, MutationScore, DEFAULT_BETA
 from bayesian_uncertainty import add_bayesian_confidence
-from calibration import AADH_KIE_DATA
+from calibration import AADH_KIE_DATA, DHFR_KIE_DATA
 from multi_mutation import scan_double_mutants, print_double_mutant_report
 from stochastic_tunnelling import build_stochastic_model
 from gnn_coupling import build_gnn_model, compute_gnn_residuals_from_scan
@@ -67,9 +67,29 @@ class ActiveSiteConfig:
     # Wild-type experimental KIE for validation
     wt_kie_exp:          float = 55.0
 
+    # When True, use wt_kie_exp as the KIE baseline in TunnelScorer instead of
+    # Bell-predicted KIE. Set this only when Bell is fundamentally miscalibrated
+    # (e.g. DHFR C→C hydride: Bell floor > experimental WT KIE).
+    # Leave False for AADH — its BETA=5.0 was calibrated against Bell-predicted wt_kie.
+    use_exp_kie_override: bool  = False
+
     # Physical ceiling parameters (Johannissen et al. J Phys Chem B 2007)
     promoting_vibration_cm1: float = 90.0   # cm⁻¹  promoting vibration frequency
     da_reduced_mass_u:       float = 6.857  # u      D-A pair reduced mass
+
+    # Per-enzyme fitted BETA (dynamic penalty weight).
+    # None → caller's beta argument (default DEFAULT_BETA=5.0) is used.
+    # Set this after LOO calibration on enzyme-specific KIE data.
+    beta: Optional[float] = None
+
+    # Which calibration dataset to use for GNN/GPR/Bayes and is_novel lookups.
+    # "AADH" = AADH_KIE_DATA (default); "DHFR" = DHFR_KIE_DATA.
+    calibration_data_key: str = "AADH"
+
+    # Minimum number of calibration mutations to unlock GPR.
+    # AADH uses 8 (LOO cross-validation showed GPR adds noise at n=4).
+    # DHFR uses 4 — lower bar because DHFR KIE data is scarcer.
+    min_calibration_gpr: int = 8
 
 
 # ── Pre-configured enzyme systems ────────────────────────────────────────────
@@ -94,6 +114,7 @@ AADH_CONFIG = ActiveSiteConfig(
 
     scan_radius=8.0,
     wt_kie_exp=55.0,
+    use_exp_kie_override=False,
     promoting_vibration_cm1=90.0,
     da_reduced_mass_u=6.857,
 )
@@ -178,13 +199,24 @@ DHFR_CONFIG = ActiveSiteConfig(
     pdb_id='1RX2',
     donor=('A', 164, 'C4N'),
     acceptor=('A', 161, 'C6'),
+    # C4N→C6 hydride: imaginary freq ~700 cm⁻¹ (Cha et al. 1989 Biochemistry;
+    # C-C hydride transfers have softer TS curvature than C-O proton transfers).
+    # barrier_height from DHFR QM/MM: Hammes-Schiffer group, ~13 kcal/mol.
+    # Note: Bell-predicted WT KIE floor (~8.1) exceeds experimental (6.8) due to
+    # classical ZPE term; wt_kie_exp override is used as baseline in TunnelScorer.
     barrier_height_kcal=13.4,
-    imaginary_freq_cm1=1184.0,
+    imaginary_freq_cm1=700.0,
     catalytic_residues=[('A', 161), ('A', 164)],
     scan_radius=10.0,
     wt_kie_exp=6.8,
+    use_exp_kie_override=True,
     promoting_vibration_cm1=50.0,
     da_reduced_mass_u=6.000,
+    calibration_data_key='DHFR',
+    min_calibration_gpr=4,
+    # BETA_DHFR=8.00 — LOO-calibrated on 6 mutations (I14V/A/G + M42W + G121V + F125M)
+    # LOO-R²=0.991, LOO-RMSE=0.038 ln(KIE) — run src/calibrate_dhfr.py to re-fit
+    beta=8.00,
 )
 
 # ── Part B enzyme configs ────────────────────────────────────────────────────
@@ -244,11 +276,44 @@ htADH_CONFIG = ActiveSiteConfig(
     da_reduced_mass_u=6.000,
 )
 
+ATA117_CONFIG = ActiveSiteConfig(
+    name='ATA-117 (R)-selective omega-TA (Arthrobacter citreus)',
+    # Structural proxy: 3WWH from Arthrobacter sp. KNK168 — the closest available
+    # structure to the ATA-117 engineering scaffold (Savile et al. Science 2010,
+    # DOI: 10.1126/science.1188934). No Arthrobacter citreus ATA crystal structure
+    # is deposited in the PDB as of 2024. 3WWH is 1.65 Å resolution, (R)-selective,
+    # fold-type IV PLP-dependent omega-TA from the same Arthrobacter genus.
+    pdb_id='3WWH',
+    # Donor: CE of catalytic Lys188 (internal aldimine with PLP C4A).
+    # In the external aldimine (substrate-bound) the substrate Cα-H transfers to
+    # PLP C4A; CE of the displaced Lys is the best available proxy from the
+    # internal aldimine crystal form.  D-A distance = 2.811 Å (from 3WWH).
+    donor=('A', 188, 'CE'),    # Lys188 Cε — catalytic Lys, internal aldimine
+    acceptor=('A', 401, 'C4A'),  # PLP C4A — electrophilic carbon of Schiff base
+    # Barrier height and imaginary frequency: estimate based on PLP-Schiff base
+    # C-N proton transfer studies (Toney group, DOI: 10.1021/bi00161a047).
+    # No QM/MM data published specifically for ATA-117.
+    barrier_height_kcal=14.0,
+    imaginary_freq_cm1=1050.0,
+    # Catalytic residues: Lys188 (forms aldimine), Asp259 (acid/base) — do not mutate.
+    catalytic_residues=[('A', 188), ('A', 401)],
+    scan_radius=8.0,
+    # wt_kie_exp: conservative estimate; Savile et al. 2010 does not report KIE
+    # values. Based on Toney group C-H transfer studies in PLP enzymes
+    # (DOI: 10.1021/bi00161a047) and Klinman-style intrinsic KIE for Schiff base
+    # proton transfer. Treat as exploratory — see ATA117_CALIBRATION in
+    # calibration_data.py for full disclosure.
+    wt_kie_exp=5.0,
+    promoting_vibration_cm1=75.0,
+    da_reduced_mass_u=6.000,
+)
+
 def run_scan(
     pdb_path:   str,
     config:     ActiveSiteConfig,
     beta:       float = DEFAULT_BETA,
-    verbose:    bool = True
+    verbose:    bool = True,
+    force_eval_residues: Optional[set] = None,
 ) -> ScanResult:
     """
     Run a complete tunnelling landscape scan.
@@ -337,8 +402,11 @@ def run_scan(
         experimental_KIE    = config.wt_kie_exp
     )
     if verbose:
-        print(f"      Predicted KIE (WT): {wt_result.predicted_KIE:.1f}")
-        print(f"      Experimental KIE:   {config.wt_kie_exp:.1f}")
+        print(f"      Bell predicted KIE (WT): {wt_result.predicted_KIE:.1f}")
+        print(f"      Experimental KIE:        {config.wt_kie_exp:.1f}")
+        if abs(wt_result.predicted_KIE - config.wt_kie_exp) / config.wt_kie_exp > 0.2:
+            print(f"      → Using exp KIE={config.wt_kie_exp:.1f} as baseline (Bell off by "
+                  f"{(wt_result.predicted_KIE/config.wt_kie_exp - 1)*100:+.0f}%)")
         print(f"      Tunnelling fraction: {wt_result.tunnelling_fraction:.1%}")
 
     # ── Build ENM ─────────────────────────────────────────────────────────────
@@ -483,10 +551,18 @@ def run_scan(
             print(f"      Substrate H-bond partners: "
                   + ", ".join(str(s.get_residue(*k)) for k in substrate_hbond_keys[:5]))
 
+    # ── Select calibration dataset ─────────────────────────────────────────────
+    _cal_key = getattr(config, 'calibration_data_key', 'AADH')
+    _cal_data = DHFR_KIE_DATA if _cal_key == 'DHFR' else AADH_KIE_DATA
+    _min_gpr  = getattr(config, 'min_calibration_gpr', 8)
+
+    # Per-enzyme beta: config.beta takes priority over caller argument
+    _beta = config.beta if getattr(config, 'beta', None) is not None else beta
+
     # ── Build scorer ─────────────────────────────────────────────────────────
     scorer = TunnelScorer(
         structure=s, enm=enm, wt_tunnelling=wt_result,
-        beta=beta,
+        beta=_beta,
         gamma=1.0,
         substrate_hbond_residue_keys=substrate_hbond_keys,
         anisotropic_alignment_map=aniso_map,
@@ -501,11 +577,15 @@ def run_scan(
         promoting_vibration_cm1=getattr(config, 'promoting_vibration_cm1', 90.0),
         da_reduced_mass_u=getattr(config, 'da_reduced_mass_u', 6.857),
         temperature=getattr(config, 'temperature', 300.0),
+        wt_kie_exp=(config.wt_kie_exp
+                   if getattr(config, 'use_exp_kie_override', False)
+                   else None),
+        kie_data=_cal_data,
     )
 
     # Physical KIE ceiling for clamping post-processing corrections
     import math as _math_ceil
-    _ln_kie_ceiling = _math_ceil.log(wt_result.predicted_KIE) + scorer.delta_r_max * 26.0
+    _ln_kie_ceiling = _math_ceil.log(scorer.wt_kie) + scorer.delta_r_max * 26.0
 
     # ── Find residues near D-A axis ───────────────────────────────────────────
     if verbose:
@@ -526,6 +606,37 @@ def run_scan(
     if verbose:
         print(f"      {len(near)} residues found, {len(near_filtered)} after filtering catalytic residues")
 
+    # ── Add force-evaluated residues (calibration mutants outside scan radius) ──
+    force_keys = set(force_eval_residues or [])
+    # Infer from calibration data: any calibration mutant residue not yet covered
+    from calibration import DHFR_KIE_DATA as _DHFR_KIE
+    if _cal_key == 'DHFR':
+        for dp in _DHFR_KIE:
+            if dp.new_aa != 'WT':
+                force_keys.add((dp.chain, dp.residue))
+    near_keys = {(res.chain, res.number) for res, _, _, _ in near_filtered}
+    for ck in force_keys - near_keys:
+        chain, resnum = ck
+        if (chain, resnum) in catalytic_keys:
+            continue
+        extra_res = s.get_residue(chain, resnum)
+        if extra_res is None:
+            continue
+        # Approximate axis distance (straight-line to midpoint of DA)
+        mid = (donor_coords + acceptor_coords) / 2.0
+        ca  = extra_res.ca
+        ed  = float(np.linalg.norm(ca.coords - mid)) if ca else 15.0
+        # Donor side heuristic
+        da_vec = acceptor_coords - donor_coords
+        if ca:
+            to_res = ca.coords - donor_coords
+            side_t = 'donor' if float(np.dot(to_res, da_vec)) < 0 else 'acceptor'
+        else:
+            side_t = 'unknown'
+        near_filtered.append((extra_res, ed, side_t, 1.0))
+        if verbose:
+            print(f"      Force-evaluated: {extra_res} (dist≈{ed:.1f}Å, calibration residue)")
+
     # ── Score all mutations ───────────────────────────────────────────────────
     all_scores = []
     for res, dist, side, t in near_filtered:
@@ -541,7 +652,7 @@ def run_scan(
 
     n_novel  = sum(1 for s in all_scores if s.is_novel)
     n_enhancing = sum(1 for s in all_scores
-                      if s.is_novel and s.predicted_kie > wt_result.predicted_KIE)
+                      if s.is_novel and s.predicted_kie > scorer.wt_kie)
 
     if verbose:
         print(f"\n{'─'*65}")
@@ -556,12 +667,12 @@ def run_scan(
         config=config,
         n_residues_found=len(near_filtered),
         n_mutations_scored=len(all_scores),
-        wt_kie_predicted=wt_result.predicted_KIE,
+        wt_kie_predicted=scorer.wt_kie,
         wt_kie_exp=config.wt_kie_exp,
         all_scores=all_scores,
         double_mutant_scores=scan_double_mutants(
             all_scores, top_n=30,
-            wt_kie=wt_result.predicted_KIE,
+            wt_kie=scorer.wt_kie,
             beta=beta
         )
     )
@@ -578,7 +689,7 @@ def run_scan(
     #   3. Fit GNN on those residuals (w_mp, w_out: 4 parameters)
     #   4. Apply GNN corrections to every MutationScore in-place
     try:
-        cal_residuals = compute_gnn_residuals_from_scan(all_scores, AADH_KIE_DATA)
+        cal_residuals = compute_gnn_residuals_from_scan(all_scores, _cal_data)
         if cal_residuals:
             gnn_model = build_gnn_model(
                 s, enm,
@@ -598,7 +709,7 @@ def run_scan(
                 sc.total_delta += gnn_r.gnn_delta
                 ln_kie = math.log(sc.predicted_kie) + gnn_r.gnn_delta
                 sc.predicted_kie = float(math.exp(min(ln_kie, _ln_kie_ceiling)))
-                sc.fold_vs_wt    = sc.predicted_kie / wt_result.predicted_KIE
+                sc.fold_vs_wt    = sc.predicted_kie / scorer.wt_kie
                 if sc.experimental_kie:
                     sc.prediction_error = abs(sc.predicted_kie - sc.experimental_kie) / sc.experimental_kie
             # Re-sort after GNN correction
@@ -628,8 +739,8 @@ def run_scan(
     # is already excellent and GPR adds noise at n=4.  Gate until GPR demonstrates
     # a strict RMSE reduction in LOO.  Run src/loo_gpr.py to re-evaluate.
     try:
-        gpr_residuals = compute_gpr_residuals_from_scan(all_scores, AADH_KIE_DATA)
-        if len(gpr_residuals) >= MIN_CALIBRATION_GPR:
+        gpr_residuals = compute_gpr_residuals_from_scan(all_scores, _cal_data)
+        if len(gpr_residuals) >= _min_gpr:
             gpr_model = build_gpr_model(all_scores, gpr_residuals, verbose=verbose)
             if gpr_model.is_fitted():
                 import math as _math
@@ -641,7 +752,7 @@ def run_scan(
                     sc.total_delta += gpr_r.gpr_delta
                     ln_kie = _math.log(sc.predicted_kie) + gpr_r.gpr_delta
                     sc.predicted_kie  = float(_math.exp(min(ln_kie, _ln_kie_ceiling)))
-                    sc.fold_vs_wt     = sc.predicted_kie / wt_result.predicted_KIE
+                    sc.fold_vs_wt     = sc.predicted_kie / scorer.wt_kie
                     if sc.experimental_kie:
                         sc.prediction_error = (abs(sc.predicted_kie - sc.experimental_kie)
                                                / sc.experimental_kie)
@@ -657,7 +768,7 @@ def run_scan(
             n_cal = len(gpr_residuals)
             if verbose:
                 print(f"  GPR gated: n={n_cal} calibration mutations "
-                      f"< {MIN_CALIBRATION_GPR} required "
+                      f"< {_min_gpr} required "
                       f"(LOO-R²=0.62 with n=4 — run loo_gpr.py to re-evaluate)")
             result.gpr_model = None
     except Exception as e:
@@ -670,7 +781,7 @@ def run_scan(
     # MutationScore with a BayesianConfidence object (ms.bayes).
     try:
         bayes_model = add_bayesian_confidence(
-            all_scores, AADH_KIE_DATA, float(np.log(wt_result.predicted_KIE)),
+            all_scores, _cal_data, float(np.log(scorer.wt_kie)),
             verbose=verbose,
         )
         result.bayes_model = bayes_model

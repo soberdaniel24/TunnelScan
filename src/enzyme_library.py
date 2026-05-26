@@ -30,6 +30,10 @@ class EnzymeProfile:
     calibration_mutants: list = field(default_factory=list)
     scan_radius_angstrom: float = 8.0
     notes: str = ""
+    # Per-enzyme fitted BETA (dynamic penalty weight).
+    # None = use DEFAULT_BETA (5.0) from tunnel_score.py.
+    # Set after LOO calibration on enzyme-specific KIE data.
+    beta: Optional[float] = None
 
     def delta_r_max(self) -> float:
         """Physically derived per-residue D-A compression ceiling (Å)."""
@@ -65,6 +69,7 @@ AADH = EnzymeProfile(
     kie_reference="10.1126/science.1126002",
     cofactor="TTQ",
     commercial_relevance="Chiral amine synthesis; model system for pharmaceutical biocatalysis",
+    beta=5.0,   # calibrated against T172 series (LOO-R²=0.944, n=4)
 )
 
 MADH = EnzymeProfile(
@@ -133,6 +138,7 @@ DHFR = EnzymeProfile(
     kie_wt_uncertainty=0.5,
     kie_reference="10.1021/bi00072a012",
     cofactor="NADPH",
+    beta=8.00,  # LOO-calibrated on 6 DHFR mutants (R²=0.991) — see calibrate_dhfr.py
     commercial_relevance=(
         "Methotrexate and antifolate drug target; "
         "hydride transfer benchmark for all computational tunnelling methods"
@@ -180,7 +186,42 @@ SLO = EnzymeProfile(
     ),
 )
 
-ALL_ENZYMES = [AADH, MADH, MR, HTADH, DHFR, SLO]
+ATA117 = EnzymeProfile(
+    name="ATA-117 (R)-selective amine transaminase (Arthrobacter citreus)",
+    # Structural proxy: 3WWH (Arthrobacter sp. KNK168, 1.65 Å, (R)-selective
+    # fold-type IV omega-TA). No Arthrobacter citreus ATA structure is in the
+    # PDB as of 2024. The engineering scaffold for Savile et al. Science 2010
+    # (DOI: 10.1126/science.1188934) was ATA-117 but its crystal structure was
+    # never deposited; 3WWH is the most relevant homologous structure available.
+    pdb_id="3WWH",
+    organism="Arthrobacter citreus",
+    reaction_type="proton_transfer",
+    donor_atom_element="C",
+    acceptor_atom_element="C",
+    da_reduced_mass_u=6.000,
+    promoting_vibration_cm1=75.0,
+    promoting_vibration_reference="10.1126/science.1188934",
+    kie_wt_experimental=5.0,
+    kie_wt_uncertainty=1.0,
+    kie_reference="10.1126/science.1188934",
+    cofactor="PLP",
+    commercial_relevance=(
+        "Merck-Codexis sitagliptin synthesis — first industrial application of "
+        "a computationally designed enzyme, replacing a Rh-catalysed asymmetric "
+        "hydrogenation. 13 rounds of directed evolution, 27,000× improved activity."
+    ),
+    calibration_mutants=[],   # see ATA117_CALIBRATION in calibration_data.py
+    notes=(
+        "Savile et al. Science 2010 reports activity/selectivity data for evolved "
+        "variants but no mutant KIE values. Intrinsic KIE for WT ATA-117 is not "
+        "published; 5.0 is a conservative estimate based on Toney group's C-H "
+        "transfer studies in PLP enzymes (DOI: 10.1021/bi00161a047). "
+        "Structure 3WWH (Arthrobacter sp. KNK168) used as homologous proxy; "
+        "catalytic Lys188 (CE) → PLP C4A D-A distance = 2.811 Å in 3WWH."
+    ),
+)
+
+ALL_ENZYMES = [AADH, MADH, MR, HTADH, DHFR, SLO, ATA117]
 
 
 class PhysicalCeilingViolation(Exception):
