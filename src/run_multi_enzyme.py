@@ -26,7 +26,8 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from tunnel_scan import (
-    AADH_CONFIG, MADH_CONFIG, MR_CONFIG, htADH_CONFIG, DHFR_CONFIG, download_pdb
+    AADH_CONFIG, MADH_CONFIG, MR_CONFIG, htADH_CONFIG, DHFR_CONFIG,
+    ATA117_CONFIG, download_pdb
 )
 from multi_enzyme import run_multi_enzyme, print_multi_enzyme_report
 from enzyme_library import ALL_ENZYMES, validate_ceiling_against_literature, PhysicalCeilingViolation
@@ -54,6 +55,8 @@ def print_ceiling_table(ceiling_results: dict) -> None:
             short_name = 'SLO'
         elif 'Aromatic' in enzyme.name:
             short_name = 'AADH'
+        elif 'ATA-117' in enzyme.name or 'amine transaminase' in enzyme.name.lower():
+            short_name = 'ATA117'
         print(
             f"  {short_name:<12} "
             f"{enzyme.promoting_vibration_cm1:>9.0f} "
@@ -88,8 +91,9 @@ def main():
         sys.exit(1)
 
     # ── Download PDB files ────────────────────────────────────────────────────
-    # Core 4 configs that have calibration data; add DHFR if PDB available
-    configs = [AADH_CONFIG, MADH_CONFIG, MR_CONFIG, htADH_CONFIG, DHFR_CONFIG]
+    # Core 4 configs that have calibration data; add DHFR if PDB available.
+    # ATA117 is uncalibrated (no KIE mutant data) but included for structural comparison.
+    configs = [AADH_CONFIG, MADH_CONFIG, MR_CONFIG, htADH_CONFIG, DHFR_CONFIG, ATA117_CONFIG]
     # Also try SLO (3PZW) if available
     try:
         from tunnel_scan import ActiveSiteConfig

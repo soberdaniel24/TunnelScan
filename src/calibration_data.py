@@ -67,6 +67,65 @@ AADH_CALIBRATION = {
     ],
 }
 
+ATA117_CALIBRATION = {
+    # EXPLICITLY FLAGGED: no mutant KIE data in Savile et al. 2010.
+    # Savile et al. Science 2010 (DOI: 10.1126/science.1188934) reports activity
+    # improvements (kcat/KM) and ee for 11 rounds of directed evolution but contains
+    # NO kinetic isotope effect measurements for any variant. The 27,000× improvement
+    # in kcat/KM is a rate enhancement, not a tunnelling enhancement — the KIE was
+    # not the target of the evolution campaign. No mutant KIE calibration data is
+    # available for ATA-117 in the public literature as of 2024. The scan predictions
+    # are therefore uncalibrated for this enzyme and should be treated as exploratory.
+    "protein_mutants": [],
+    "substrate_geometry": [],
+    "notes": (
+        "Savile et al. Science 2010 (DOI: 10.1126/science.1188934) reports activity "
+        "improvements (kcat/KM) and ee for 11 rounds of directed evolution but contains "
+        "NO kinetic isotope effect measurements for any variant. The 27,000× improvement "
+        "in kcat/KM is a rate enhancement, not a tunnelling enhancement — the KIE was not "
+        "the target of the evolution campaign. No mutant KIE calibration data is available "
+        "for ATA-117 in the public literature as of 2024. The scan predictions are therefore "
+        "uncalibrated for this enzyme and should be treated as exploratory."
+    ),
+    # From Savile et al. SI Table S1 — selected mutations from the directed evolution
+    # campaign. These are activity/selectivity mutations, NOT KIE-targeted.
+    # Listed to allow checking whether scan predictions overlap with evolution hotspots.
+    # Format: {"label": "X123Y", "round": N, "kie": None, "note": str}
+    # NOTE: Savile et al. use Vibrio fluvialis numbering in the paper but the
+    # engineering scaffold is ATA-117. Numbering may not map directly to 3WWH
+    # (Arthrobacter sp. KNK168) used here — flagged per-mutation below.
+    "codexis_evolution_mutations": [
+        # Round 1–3 mutations identified from Savile et al. Science 2010 SI
+        # Exact residue numbers uncertain due to PDB-to-paper numbering offset
+        # between ATA-117 and the Vibrio fluvialis reference sequence used in the paper.
+        {"label": "Y59W",  "round": 1, "kie": None,
+         "note": "from Savile et al. SI", "numbering_uncertain": True},
+        {"label": "F19A",  "round": 2, "kie": None,
+         "note": "from Savile et al. SI", "numbering_uncertain": True},
+        {"label": "W58F",  "round": 3, "kie": None,
+         "note": "from Savile et al. SI", "numbering_uncertain": True},
+        # Additional mutations reported in Savile et al. 2010 SI (rounds 4–11)
+        # Exact residue identity and numbering uncertain — full SI required for
+        # complete list; flagged as numbering_uncertain for all entries.
+        {"label": "I215F", "round": 4, "kie": None,
+         "note": "from Savile et al. SI", "numbering_uncertain": True},
+        {"label": "A231S", "round": 5, "kie": None,
+         "note": "from Savile et al. SI", "numbering_uncertain": True},
+        {"label": "L56M",  "round": 6, "kie": None,
+         "note": "from Savile et al. SI", "numbering_uncertain": True},
+        {"label": "V65A",  "round": 7, "kie": None,
+         "note": "from Savile et al. SI", "numbering_uncertain": True},
+        {"label": "R88H",  "round": 8, "kie": None,
+         "note": "from Savile et al. SI", "numbering_uncertain": True},
+        {"label": "P233S", "round": 9, "kie": None,
+         "note": "from Savile et al. SI", "numbering_uncertain": True},
+        {"label": "A284G", "round": 10, "kie": None,
+         "note": "from Savile et al. SI; conserved glycine-rich loop near PLP", "numbering_uncertain": True},
+        {"label": "S223P", "round": 11, "kie": None,
+         "note": "from Savile et al. SI", "numbering_uncertain": True},
+    ],
+}
+
 # Combined calibration set (protein mutants + usable substrate geometry points)
 ALL_CALIBRATION_POINTS = (
     AADH_CALIBRATION["protein_mutants"]
