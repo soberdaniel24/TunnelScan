@@ -102,7 +102,7 @@ def loo_r2(pdb_path: str, beta: float,
 
 def fit_beta_dhfr(
     pdb_path: str,
-    beta_range: Tuple[float, float, float] = (0.5, 15.0, 0.25),
+    beta_range: Tuple[float, float, float] = (0.05, 15.0, 0.05),
     data: List[KIEDataPoint] = DHFR_KIE_DATA,
 ) -> dict:
     """
@@ -198,9 +198,9 @@ def main():
 
     # ── Grid search ───────────────────────────────────────────────────────────
     print(f"\n{'='*65}")
-    print(f"  LOO-R² GRID SEARCH  (BETA 0.5 → 15.0, step 0.25)")
+    print(f"  LOO-R² GRID SEARCH  (coarse: BETA 0.05 → 15.0, step 0.05)")
     print(f"{'='*65}")
-    fit = fit_beta_dhfr(pdb_path, beta_range=(0.5, 15.0, 0.25))
+    fit = fit_beta_dhfr(pdb_path, beta_range=(0.05, 15.0, 0.05))
 
     BETA_DHFR = fit['best_beta']
     LOO_R2    = fit['best_r2']
@@ -216,6 +216,39 @@ def main():
     for b, r2, rmse in grid_valid[:10]:
         marker = ' ← BEST' if b == BETA_DHFR else ''
         print(f"  {b:>6.2f}  {r2:>8.3f}  {rmse:>10.4f}{marker}")
+
+    # ── ASCII LOO-R² curve ────────────────────────────────────────────────────
+    print(f"\n  ASCII LOO-R² curve (every 5th grid point):")
+    print(f"  {'BETA':>5}  LOO-R²")
+    for b, r2, rmse in fit['grid'][::5]:
+        if np.isnan(r2):
+            continue
+        bar = '█' * max(0, int((r2 + 0.5) * 20))
+        marker = ' ← BEST' if abs(b - BETA_DHFR) < 0.03 else ''
+        print(f"  {b:5.2f}  {bar:<20} {r2:+.3f}{marker}")
+
+    # ── Fine grid if optimum is interior ─────────────────────────────────────
+    at_lo = (abs(BETA_DHFR - fit['grid'][0][0]) < 1e-6)  # exactly at lower boundary
+    if not at_lo:
+        lo_fine = max(0.01, BETA_DHFR - 0.10)
+        hi_fine = BETA_DHFR + 0.10
+        fine_fit = fit_beta_dhfr(pdb_path, beta_range=(lo_fine, hi_fine, 0.01))
+        BETA_DHFR_FINE = fine_fit['best_beta']
+        LOO_R2_FINE    = fine_fit['best_r2']
+        LOO_RMSE_FINE  = fine_fit['best_rmse']
+        print(f"\n  Fine grid [{lo_fine:.2f}→{hi_fine:.2f}, step=0.01]:")
+        fine_top5 = sorted([(b, r2, rmse) for b, r2, rmse in fine_fit['grid']
+                             if not np.isnan(r2)], key=lambda x: -x[1])[:5]
+        for b, r2, rmse in fine_top5:
+            marker = ' ← BEST' if b == BETA_DHFR_FINE else ''
+            print(f"    BETA={b:.2f}  LOO-R²={r2:.4f}  RMSE={rmse:.4f}{marker}")
+        BETA_DHFR = BETA_DHFR_FINE
+        LOO_R2    = LOO_R2_FINE
+        LOO_RMSE  = LOO_RMSE_FINE
+        print(f"\n  Confirmed optimum: BETA_DHFR = {BETA_DHFR:.2f}  "
+              f"(interior, {'NOT' if BETA_DHFR > lo_fine + 0.02 else '≈'} at boundary)")
+    else:
+        print(f"\n  Optimum at coarse grid lower boundary — fine grid not run.")
 
     # ── Calibration table at optimal BETA ────────────────────────────────────
     print(f"\n  --- With BETA_DHFR = {BETA_DHFR:.2f} (LOO-optimal) ---")

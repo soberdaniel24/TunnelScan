@@ -138,7 +138,7 @@ DHFR = EnzymeProfile(
     kie_wt_uncertainty=0.5,
     kie_reference="10.1021/bi00072a012",
     cofactor="NADPH",
-    beta=0.50,  # LOO-calibrated on I14V/A/G (n=3, LOO-R²=0.571) — calibrate_dhfr.py
+    beta=0.10,  # LOO-calibrated on I14V/A/G (n=3, LOO-R²=0.580) — calibrate_dhfr.py
     # Previous beta=8.00 was fitted on 6 entries including M42W/G121V/F125M, which
     # had fabricated sources and wrong-direction values; those entries were removed.
     commercial_relevance=(

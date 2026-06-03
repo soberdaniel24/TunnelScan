@@ -214,9 +214,9 @@ DHFR_CONFIG = ActiveSiteConfig(
     da_reduced_mass_u=6.000,
     calibration_data_key='DHFR',
     min_calibration_gpr=4,
-    # BETA_DHFR=0.50 — LOO-calibrated on I14 series (n=3, LOO-R²=0.571).
+    # BETA_DHFR=0.10 — LOO-calibrated on I14 series (n=3, LOO-R²=0.580, RMSE=0.187 ln(KIE)).
     # GPR gated (n=3 < min_calibration_gpr=4). Prior claim of LOO-R²=0.991 was wrong.
-    beta=0.50,
+    beta=0.10,
 )
 
 # ── Part B enzyme configs ────────────────────────────────────────────────────
