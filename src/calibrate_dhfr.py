@@ -102,7 +102,7 @@ def loo_r2(pdb_path: str, beta: float,
 
 def fit_beta_dhfr(
     pdb_path: str,
-    beta_range: Tuple[float, float, float] = (0.5, 10.0, 0.25),
+    beta_range: Tuple[float, float, float] = (0.5, 15.0, 0.25),
     data: List[KIEDataPoint] = DHFR_KIE_DATA,
 ) -> dict:
     """
@@ -187,7 +187,8 @@ def main():
     print(f"  {'─'*60}")
     for dp in cal_pts:
         src_short = dp.source.split(',')[0]
-        conf = ' [MOD]' if 'MOD' in dp.source else ' [HIGH]'
+        conf = (' [LOW]' if 'LOW' in dp.source
+                else (' [MOD]' if 'MOD' in dp.source else ' [HIGH]'))
         print(f"  {dp.label:<12} {dp.kie_298k:>8.1f} {dp.kie_error:>5.1f}  "
               f"{src_short}{conf}")
 
@@ -197,9 +198,9 @@ def main():
 
     # ── Grid search ───────────────────────────────────────────────────────────
     print(f"\n{'='*65}")
-    print(f"  LOO-R² GRID SEARCH  (BETA 0.5 → 10.0, step 0.25)")
+    print(f"  LOO-R² GRID SEARCH  (BETA 0.5 → 15.0, step 0.25)")
     print(f"{'='*65}")
-    fit = fit_beta_dhfr(pdb_path, beta_range=(0.5, 10.0, 0.25))
+    fit = fit_beta_dhfr(pdb_path, beta_range=(0.5, 15.0, 0.25))
 
     BETA_DHFR = fit['best_beta']
     LOO_R2    = fit['best_r2']
@@ -219,6 +220,29 @@ def main():
     # ── Calibration table at optimal BETA ────────────────────────────────────
     print(f"\n  --- With BETA_DHFR = {BETA_DHFR:.2f} (LOO-optimal) ---")
     print_calibration_table(pdb_path, BETA_DHFR)
+
+    # ── Per-point LOO absolute errors ────────────────────────────────────────
+    preds_opt = _run_dhfr_scan(pdb_path, BETA_DHFR)
+    cal_pts_v  = [dp for dp in DHFR_KIE_DATA if dp.new_aa != 'WT'
+                  and dp.label not in _DOUBLE_MUTANTS]
+    print(f"\n  Per-point LOO absolute errors (BETA={BETA_DHFR:.2f}):")
+    print(f"  {'Mutation':<10} {'Exp KIE':>8} {'Pred KIE':>9} {'|Δln|':>7}")
+    print(f"  {'─'*38}")
+    for dp in cal_pts_v:
+        pred = preds_opt.get(dp.label, float('nan'))
+        dln  = abs(np.log(max(pred,1e-3)) - np.log(dp.kie_298k)) if not np.isnan(pred) else float('nan')
+        print(f"  {dp.label:<10} {dp.kie_298k:>8.1f} {pred:>9.2f} {dln:>7.3f}")
+
+    # ── G121V and M42W direction check ────────────────────────────────────────
+    print(f"\n  Direction check for G121V and M42W (NOT calibration points):")
+    print(f"  Literature: both should be ABOVE WT (> 6.8) — inflated KIEs")
+    for lbl, resnum in [('G121V', 121), ('M42W', 42)]:
+        pred = preds_opt.get(lbl, float('nan'))
+        if not np.isnan(pred):
+            direction = 'ABOVE WT ✓' if pred > 6.8 else 'BELOW WT ✗ (wrong direction)'
+            print(f"  {lbl}: predicted KIE = {pred:.2f}  [{direction}]")
+        else:
+            print(f"  {lbl}: not found in scan (may be outside radius)")
 
     # ── Top 10 novel DHFR predictions with confidence scores ─────────────────
     import dataclasses

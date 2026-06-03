@@ -43,13 +43,12 @@ Calibrated against published AADH (aromatic amine dehydrogenase) mutant KIE data
 | T172C | 12.1 | 12.1 | <1% |
 | T172V | 4.8 | 4.8 | <1% |
 
-Cross-validated on DHFR (E. coli dihydrofolate reductase) with no parameter changes:
+Applied to DHFR (E. coli dihydrofolate reductase):
 
-- I14A correctly predicted as reducing tunnelling — donor-side backstop, sign derived from D-A axis geometry
-- F125 mutations correctly predicted as reducing tunnelling
-- G121 identified as tunnelling-relevant at 19Å from the active site via ENM network coupling — outside the geometric scan radius, recovered through collective mode cross-correlation
+- I14 series (I14V/I14A/I14G) direction correctly predicted from D-A axis geometry: removing the Ile14 sidechain progressively broadens the donor-acceptor distance distribution, inflating KIE for I14G and deflating for I14V (Stojković et al. JACS 2012)
+- G121 identified as tunnelling-relevant at 19Å from the active site via ENM network coupling — outside the geometric scan radius, recovered through collective mode cross-correlation (Singh et al. ACS Catal 2015 confirms G121/M42/F125/I14 dynamic network)
 
-G121 identification is significant: it is the canonical example of a distal tunnelling-network residue in the enzyme kinetics literature, and no existing enzyme engineering tool finds it.
+G121 identification is significant: it is the canonical example of a distal tunnelling-network residue in the enzyme kinetics literature. The ENM betweenness topology correctly recovers it without using any KIE calibration data.
 
 ---
 

@@ -138,23 +138,27 @@ DHFR = EnzymeProfile(
     kie_wt_uncertainty=0.5,
     kie_reference="10.1021/bi00072a012",
     cofactor="NADPH",
-    beta=8.00,  # LOO-calibrated on I14V/A/G (n=3, R²=0.991) — see calibrate_dhfr.py
-    # NOTE: M42W/G121V/F125M entries that boosted n to 6 had wrong sources and
-    # contradicted published abstracts; removed to DHFR_KIE_DATA_UNVERIFIED.
-    # Re-run calibrate_dhfr.py to refit beta on verified n=3 data.
+    beta=0.50,  # LOO-calibrated on I14V/A/G (n=3, LOO-R²=0.571) — calibrate_dhfr.py
+    # Previous beta=8.00 was fitted on 6 entries including M42W/G121V/F125M, which
+    # had fabricated sources and wrong-direction values; those entries were removed.
     commercial_relevance=(
         "Methotrexate and antifolate drug target; "
         "hydride transfer benchmark for all computational tunnelling methods"
     ),
     calibration_mutants=[
-        {"label": "I14V", "kie": 4.5, "uncertainty": 0.5, "reference": "10.1073/pnas.1102948108"},
-        {"label": "I14A", "kie": 6.8, "uncertainty": 0.8, "reference": "10.1073/pnas.1102948108"},
-        {"label": "I14G", "kie": 9.1, "uncertainty": 1.0, "reference": "10.1073/pnas.1102948108"},
-        {"label": "M42W", "kie": 3.2, "uncertainty": 0.4, "reference": "10.1021/bi050586p"},
+        # I14 series: Stojković et al. JACS 2012, DOI 10.1021/ja209425w
+        # Values are in the paper's SI (full text paywalled); direction confirmed.
+        {"label": "I14V", "kie": 4.5, "uncertainty": 0.5, "reference": "10.1021/ja209425w", "confidence": "LOW"},
+        {"label": "I14A", "kie": 6.8, "uncertainty": 0.8, "reference": "10.1021/ja209425w", "confidence": "LOW"},
+        {"label": "I14G", "kie": 9.1, "uncertainty": 1.0, "reference": "10.1021/ja209425w", "confidence": "LOW"},
     ],
     notes=(
-        "I14V/A/G series systematically reduces DAD by removing sidechain bulk. "
-        "Use as primary validation of the physical ceiling derivation."
+        "I14V/A/G series: systematic DAD broadening as Ile sidechain is removed. "
+        "I14V deflates KIE (less room for compression); I14G inflates (unrestrained DAD). "
+        "Stojković et al. 2012 JACS is the correct source (DOI 10.1021/ja209425w). "
+        "M42W and G121V have INFLATED intrinsic KIEs (> WT) per Wang 2006 PMID 16873118 "
+        "and PMID 16445280 — opposite to prior wrong entries. Actual numerical values "
+        "are in paywalled full text; add to calibration_mutants when verified."
     ),
 )
 

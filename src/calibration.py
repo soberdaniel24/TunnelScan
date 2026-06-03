@@ -169,52 +169,6 @@ DHFR_KIE_DATA: List[KIEDataPoint] = [
     ),
 ]
 
-# ── UNVERIFIED DHFR KIE data — DO NOT USE FOR CALIBRATION ────────────────────
-#
-# These entries were in DHFR_KIE_DATA but were removed after literature checks
-# revealed wrong sources, wrong values, or non-existent papers.
-# Preserved here for reference only.
-#
-DHFR_KIE_DATA_UNVERIFIED: List[KIEDataPoint] = [
-
-    # M42W = 3.2: WRONG. Published abstract (Wang 2006 Phil Trans, PMID 16873118)
-    # says M42W has inflated KIE > WT; 3.2 is deflated. Source DOI not found.
-    KIEDataPoint(
-        label='M42W', residue=42, orig_aa='MET', new_aa='TRP', chain='A',
-        kie_298k=3.2, kie_error=0.4,
-        mechanism='dynamic',
-        source='[UNVERIFIED — source DOI 10.1021/bi050586p not found; value contradicts Wang 2006 PMID 16873118 (inflated KIE)]'
-    ),
-
-    # G121V = 3.4: WRONG. Wang 2006 Biochemistry (PMID 16445280) says G121V has
-    # slightly inflated KIE > WT; 3.4 is deflated. Rajagopalan 2002 PMID 12379104
-    # reports rates not KIEs.
-    KIEDataPoint(
-        label='G121V', residue=121, orig_aa='GLY', new_aa='VAL', chain='A',
-        kie_298k=3.4, kie_error=0.5,
-        mechanism='dynamic',
-        source='[UNVERIFIED — value contradicts Wang 2006 PMID 16445280 (inflated KIE); source DOI malformed]'
-    ),
-
-    # G121VM42W = 2.8: double mutant; source not found; single-point scan cannot
-    # predict double mutants regardless.
-    KIEDataPoint(
-        label='G121VM42W', residue=121, orig_aa='GLY', new_aa='VAL', chain='A',
-        kie_298k=2.8, kie_error=0.6,
-        mechanism='dynamic',
-        source='[UNVERIFIED — double mutant, source not found]'
-    ),
-
-    # F125M = 3.0: source paper does not exist. No "Pudney et al. JACS 2013"
-    # DHFR paper in PubMed. Value appears to be fabricated.
-    KIEDataPoint(
-        label='F125M', residue=125, orig_aa='PHE', new_aa='MET', chain='A',
-        kie_298k=3.0, kie_error=0.5,
-        mechanism='mixed',
-        source='[UNVERIFIED — source "Pudney et al. JACS 2013 DOI 10.1021/ja4032418" does not exist in PubMed]'
-    ),
-]
-
 # ── Known experimental status of mutations ────────────────────────────────────
 
 TESTED_MUTATIONS = {d.label for d in AADH_KIE_DATA if d.new_aa != 'WT'}

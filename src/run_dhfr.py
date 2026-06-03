@@ -18,7 +18,7 @@ if not os.path.exists(pdb_path):
     download_pdb('1RX2', structures_dir)
 
 # ── Run standard local scan ───────────────────────────────────────────────────
-result = run_scan(pdb_path, DHFR_CONFIG, beta=3.0, verbose=True)
+result = run_scan(pdb_path, DHFR_CONFIG, verbose=True)
 print_quick_summary(result)
 
 # ── Network scan: distal residues coupled via ENM ─────────────────────────────
@@ -73,16 +73,19 @@ for sc in network_scores[:10]:
           f"{sc.dynamic_delta:>+7.2f} {dist:>7.1f}A  "
           f"{'★NOVEL★' if sc.is_novel else ''}")
 
-print(f"\n  Literature check (should appear in network scan):")
-for resnum, label in [(121,'G121'),(42,'M42')]:
-    # M42 is in local scan
-    local_match = [sc for sc in result.all_scores if sc.residue_number == resnum]
-    network_match = [sc for sc in network_scores if sc.residue_number == resnum]
+print(f"\n  Direction check — G121V and M42W (literature: both ABOVE WT 6.8):")
+print(f"  (These are not calibration points; direction check only)")
+for resnum, label, lit_val in [(121,'G121V','inflated > 6.8'),(42,'M42W','inflated > 6.8')]:
+    local_match = [sc for sc in result.all_scores
+                   if sc.residue_number == resnum and sc.label.startswith(label[:3])]
+    network_match = [sc for sc in network_scores
+                     if sc.residue_number == resnum and sc.label.startswith(label[:3])]
     all_match = local_match + network_match
     if all_match:
         for sc in all_match[:2]:
             src = "local" if sc in local_match else "network"
-            print(f"  {sc.label} [{src}]: KIE={sc.predicted_kie:.1f}  "
-                  f"dyn={sc.dynamic_delta:+.2f}")
+            direction = "ABOVE WT ✓" if sc.predicted_kie > 6.8 else "BELOW WT ✗"
+            print(f"  {sc.label} [{src}]: KIE={sc.predicted_kie:.2f}  "
+                  f"dyn={sc.dynamic_delta:+.2f}  [{direction}]  lit={lit_val}")
     else:
-        print(f"  {label}: not found in either scan")
+        print(f"  {label}: not found — may be outside scan radius")
