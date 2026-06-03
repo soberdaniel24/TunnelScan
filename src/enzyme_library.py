@@ -138,7 +138,10 @@ DHFR = EnzymeProfile(
     kie_wt_uncertainty=0.5,
     kie_reference="10.1021/bi00072a012",
     cofactor="NADPH",
-    beta=8.00,  # LOO-calibrated on 6 DHFR mutants (R²=0.991) — see calibrate_dhfr.py
+    beta=8.00,  # LOO-calibrated on I14V/A/G (n=3, R²=0.991) — see calibrate_dhfr.py
+    # NOTE: M42W/G121V/F125M entries that boosted n to 6 had wrong sources and
+    # contradicted published abstracts; removed to DHFR_KIE_DATA_UNVERIFIED.
+    # Re-run calibrate_dhfr.py to refit beta on verified n=3 data.
     commercial_relevance=(
         "Methotrexate and antifolate drug target; "
         "hydride transfer benchmark for all computational tunnelling methods"

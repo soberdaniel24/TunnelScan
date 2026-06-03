@@ -91,17 +91,48 @@ AADH_KIE_DATA: List[KIEDataPoint] = [
 # ── DHFR published intrinsic KIE dataset ─────────────────────────────────────
 #
 # All values are intrinsic (commitment-corrected) kH/kD at ~298K unless noted.
-# WT reference is 6.8 (intrinsic, Loveridge et al. 2011 PNAS).
+# WT intrinsic KIE = 6.8; canonical measurement: Sikorski et al. 2004 JACS
+# 126:4778, DOI 10.1021/ja031683w.
+#
+# LITERATURE VERIFICATION (2026-05-26):
+# Each entry below was checked against its cited DOI. Findings:
+#
+#   I14 series: source DOI 10.1073/pnas.1102948108 ("Loveridge PNAS 2011")
+#     does NOT exist (404). Correct paper is Stojković et al. 2012 JACS
+#     DOI 10.1021/ja209425w (PMID 22171795, PMC4341912). Values (4.5/6.8/9.1)
+#     are in the SI of that paper; direction is consistent with published
+#     abstracts but exact numbers COULD NOT BE VERIFIED from open-access text.
+#
+#   M42W = 3.2: SOURCE NOT FOUND. DOI 10.1021/bi050586p returns no PubMed
+#     result. Wang et al. 2006 Phil Trans (PMID 16873118) — the actual M42W
+#     intrinsic KIE paper — explicitly states M42W has "inflated primary KIEs"
+#     ABOVE WT. Stored value 3.2 < WT 6.8 is the WRONG DIRECTION.
+#
+#   G121V = 3.4: SOURCE WRONG. DOI 10.1073/pnas.032598199 misformatted;
+#     Rajagopalan et al. 2002 Biochemistry (PMID 12379104) reports hydride
+#     transfer RATES not KIEs. Wang et al. 2006 Biochemistry (PMID 16445280)
+#     — the actual G121V KIE paper — says G121V has "slightly inflated primary
+#     KIEs" ABOVE WT. Stored value 3.4 < WT 6.8 is the WRONG DIRECTION.
+#
+#   G121VM42W = 2.8: SOURCE NOT FOUND. Same bad DOI. Value unverifiable;
+#     double mutant cannot be predicted by single-point scan regardless.
+#
+#   F125M = 3.0: SOURCE DOES NOT EXIST. No "Pudney et al. JACS 2013" DHFR
+#     paper found in PubMed (only unrelated antimalarial Pudney paper). Value
+#     appears fabricated.
+#
+# RESULT: M42W, G121V, G121VM42W, F125M moved to DHFR_KIE_DATA_UNVERIFIED.
+# DHFR_KIE_DATA contains only entries whose direction is consistent with
+# published literature. BETA_DHFR re-calibration on n=3 is needed.
 #
 # Confidence tiers:
-#   HIGH   — multiple independent measurements, exact value widely cited
-#   MOD    — value from single study, plausible but verify before publishing
+#   HIGH      — sourced to correct paper; direction consistent with literature
+#   LOW       — direction consistent but exact value not verified from full text
+#   RETRACTED — stored value contradicts published data; moved to unverified list
 #
 # Sources:
-#   [LO2011] Loveridge et al. PNAS 2011, DOI 10.1073/pnas.1102948108 — I14 series
-#   [SW2004] Swanwick et al. Biochemistry 2004, DOI 10.1021/bi050586p — M42W
-#   [RA2002] Rajagopalan et al. PNAS 2002, DOI 10.1073/pnas.032598199 — G121V
-#   [PU2013] Pudney et al. JACS 2013, DOI 10.1021/ja4032418 — F125 series
+#   [SI2004] Sikorski et al. JACS 2004, DOI 10.1021/ja031683w — WT intrinsic KIE
+#   [ST2012] Stojković et al. JACS 2012, DOI 10.1021/ja209425w — I14 series
 #
 DHFR_KIE_DATA: List[KIEDataPoint] = [
 
@@ -109,73 +140,78 @@ DHFR_KIE_DATA: List[KIEDataPoint] = [
         label='WT', residue=0, orig_aa='WT', new_aa='WT', chain='A',
         kie_298k=6.8, kie_error=0.6,
         mechanism='wt',
-        source='Loveridge et al. PNAS 2011, DOI 10.1073/pnas.1102948108'
+        source='Sikorski et al. JACS 2004, DOI 10.1021/ja031683w [HIGH]'
     ),
 
-    # ── I14 series (HIGH confidence) ─────────────────────────────────────────
+    # ── I14 series (LOW confidence — correct source, values in SI not verified) ──
     # Ile14 lines the hydride donor face of the nicotinamide ring in 1RX2.
-    # Smaller sidechains create more DA compression room → higher KIE for GLY,
-    # reduced steric backstop → lower KIE for VAL.  All measured at 25°C.
+    # Smaller sidechains broaden the DAD distribution: I14G → most temperature-
+    # dependent KIE (inflated at 25°C), I14V → slightly deflated. Direction
+    # confirmed by Stojković 2012 abstract and cited computational studies.
+    # Exact values (4.5 / 6.8 / 9.1) are in the paper's SI; full text blocked.
     KIEDataPoint(
         label='I14V', residue=14, orig_aa='ILE', new_aa='VAL', chain='A',
         kie_298k=4.5, kie_error=0.5,
         mechanism='static',
-        source='Loveridge et al. PNAS 2011, DOI 10.1073/pnas.1102948108'
+        source='Stojković et al. JACS 2012, DOI 10.1021/ja209425w [LOW — values in SI, not verified from full text]'
     ),
     KIEDataPoint(
         label='I14A', residue=14, orig_aa='ILE', new_aa='ALA', chain='A',
         kie_298k=6.8, kie_error=0.8,
         mechanism='static',
-        source='Loveridge et al. PNAS 2011, DOI 10.1073/pnas.1102948108'
+        source='Stojković et al. JACS 2012, DOI 10.1021/ja209425w [LOW — values in SI, not verified from full text]'
     ),
     KIEDataPoint(
         label='I14G', residue=14, orig_aa='ILE', new_aa='GLY', chain='A',
         kie_298k=9.1, kie_error=1.0,
         mechanism='static',
-        source='Loveridge et al. PNAS 2011, DOI 10.1073/pnas.1102948108'
+        source='Stojković et al. JACS 2012, DOI 10.1021/ja209425w [LOW — values in SI, not verified from full text]'
     ),
+]
 
-    # ── M42 / G121 series (HIGH confidence for M42W; MOD for G121V) ──────────
-    # M42 (~10 Å) and G121 (~19 Å) act through the dynamic promoting-vibration
-    # network; their effects are primarily dynamic, not geometric.
+# ── UNVERIFIED DHFR KIE data — DO NOT USE FOR CALIBRATION ────────────────────
+#
+# These entries were in DHFR_KIE_DATA but were removed after literature checks
+# revealed wrong sources, wrong values, or non-existent papers.
+# Preserved here for reference only.
+#
+DHFR_KIE_DATA_UNVERIFIED: List[KIEDataPoint] = [
+
+    # M42W = 3.2: WRONG. Published abstract (Wang 2006 Phil Trans, PMID 16873118)
+    # says M42W has inflated KIE > WT; 3.2 is deflated. Source DOI not found.
     KIEDataPoint(
         label='M42W', residue=42, orig_aa='MET', new_aa='TRP', chain='A',
         kie_298k=3.2, kie_error=0.4,
         mechanism='dynamic',
-        source='Swanwick et al. Biochemistry 2004, DOI 10.1021/bi050586p'
+        source='[UNVERIFIED — source DOI 10.1021/bi050586p not found; value contradicts Wang 2006 PMID 16873118 (inflated KIE)]'
     ),
-    # G121V: intrinsic KIE from competitive isotope labelling,
-    # Rajagopalan et al. PNAS 2002 + corroborated by Swanwick et al. 2004.
-    # confidence=MOD — verify if using for publication
+
+    # G121V = 3.4: WRONG. Wang 2006 Biochemistry (PMID 16445280) says G121V has
+    # slightly inflated KIE > WT; 3.4 is deflated. Rajagopalan 2002 PMID 12379104
+    # reports rates not KIEs.
     KIEDataPoint(
         label='G121V', residue=121, orig_aa='GLY', new_aa='VAL', chain='A',
         kie_298k=3.4, kie_error=0.5,
         mechanism='dynamic',
-        source='Rajagopalan et al. PNAS 2002, DOI 10.1073/pnas.032598199 '
-                '(confidence=MOD — verify intrinsic vs observed)'
+        source='[UNVERIFIED — value contradicts Wang 2006 PMID 16445280 (inflated KIE); source DOI malformed]'
     ),
 
-    # ── G121V/M42W double mutant (MOD confidence) ────────────────────────────
-    # Swanwick et al. 2004 Biochemistry reports the double mutant;
-    # exact value depends on additive vs non-additive dynamic coupling.
+    # G121VM42W = 2.8: double mutant; source not found; single-point scan cannot
+    # predict double mutants regardless.
     KIEDataPoint(
         label='G121VM42W', residue=121, orig_aa='GLY', new_aa='VAL', chain='A',
         kie_298k=2.8, kie_error=0.6,
         mechanism='dynamic',
-        source='Swanwick et al. Biochemistry 2004, DOI 10.1021/bi050586p '
-                '(confidence=MOD — double mutant, verify values)'
+        source='[UNVERIFIED — double mutant, source not found]'
     ),
 
-    # ── F125 (MOD confidence) ─────────────────────────────────────────────────
-    # F125 is directly adjacent to the nicotinamide binding pocket; Pudney et al.
-    # 2013 JACS studied F125 variants. F125M replaces the aromatic ring with a
-    # flexible Met, disrupting pi-stacking with NADPH and altering the DA environment.
+    # F125M = 3.0: source paper does not exist. No "Pudney et al. JACS 2013"
+    # DHFR paper in PubMed. Value appears to be fabricated.
     KIEDataPoint(
         label='F125M', residue=125, orig_aa='PHE', new_aa='MET', chain='A',
         kie_298k=3.0, kie_error=0.5,
         mechanism='mixed',
-        source='Pudney et al. JACS 2013, DOI 10.1021/ja4032418 '
-                '(confidence=MOD — verify exact value)'
+        source='[UNVERIFIED — source "Pudney et al. JACS 2013 DOI 10.1021/ja4032418" does not exist in PubMed]'
     ),
 ]
 

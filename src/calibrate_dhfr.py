@@ -18,15 +18,18 @@ The model:
 
 BETA controls the weight of the dynamic (promoting-vibration disruption)
 component. For AADH it was fitted to 5.0 on the T172 H-bond disruption series.
-For DHFR the calibration set includes both geometric mutations (I14 series)
-and dynamic mutations (M42W, G121V) — the optimal BETA balances both.
+For DHFR the calibration set contains only the verified I14 series (n=3).
 
 Calibration dataset (DHFR_KIE_DATA from calibration.py):
-    I14V  4.5  (static — sidechain packing, Loveridge PNAS 2011)
-    I14A  6.8  (static — minimal change, same as WT)
-    I14G  9.1  (static — creates DA compression room)
-    M42W  3.2  (dynamic — remote M42 disrupts promoting vibration)
-    G121V 3.4  (dynamic — distal G121, network coupling)
+    I14V  4.5  (static — Stojković et al. JACS 2012, DOI 10.1021/ja209425w)
+    I14A  6.8  (static — same source)
+    I14G  9.1  (static — same source; values from SI, direction verified)
+
+Previously included entries (M42W=3.2, G121V=3.4, G121VM42W=2.8, F125M=3.0)
+were removed after literature verification found wrong/missing sources and values
+that contradict published abstracts (M42W and G121V actually have inflated KIEs
+above WT per Wang et al. 2006 PMID 16873118 and PMID 16445280). These entries
+are preserved in DHFR_KIE_DATA_UNVERIFIED in calibration.py.
 
 Note on cross-enzyme transfer of GEOM_COUPLING:
     GEOM_COUPLING=0.016 was calibrated on AADH T172. For DHFR I14, the
