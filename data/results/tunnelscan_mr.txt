@@ -1,0 +1,81 @@
+█████████████████████████████████████████████████████████████████
+  TUNNELSCAN REPORT — MORPHINONE REDUCTASE (P. putida M10)
+█████████████████████████████████████████████████████████████████
+  Generated: 2026-06-09 02:14
+  Enzyme:    Morphinone reductase (Pseudomonas putida M10)
+  PDB:       1GWJ (substrate-free, 2.2 Å)
+  BETA:      5.0 (AADH-calibrated; zero-parameter transfer test)
+  Residues scanned:    53
+  Mutations predicted: 200
+  Novel predictions:   200
+
+─────────────────────────────────────────────────────────────────
+  ACTIVE SITE
+─────────────────────────────────────────────────────────────────
+  D-A proxy: His186 CA → Tyr183 CA (crystal distance: 9.282 Å)
+  True transfer: NADH C4 → FMN N5 (hydride, ~3-4 Å in cofactor)
+  Note: NADH absent from 1GWJ (substrate-free); CA proxy used
+
+─────────────────────────────────────────────────────────────────
+  WT KIE
+─────────────────────────────────────────────────────────────────
+  Bell predicted (uncorrected):  41.4
+  Experimental (override):        7.1  (Pudney et al. JACS 2008, 10.1021/ja800471f)
+  Observed at 25°C/1 bar:         4.0  (Hay et al. PNAS 2007, 10.1073/pnas.0608408104)
+  Fitted KIE₀ (zero-pressure):    6.8  (Hoeven et al. FEBS J 2015, 10.1111/febs.13193)
+
+─────────────────────────────────────────────────────────────────
+  NETWORK TOPOLOGY
+─────────────────────────────────────────────────────────────────
+  Nodes (D-A network):  197
+  λ₂ (Fiedler gap):     0.1420  (two sub-networks)
+  Ω (robustness):       0.0716
+  Top betweenness residues:
+    LEU17  (A)  B=1.000  — highest network bottleneck
+    ALA227 (A)  B=0.929
+    SER60  (A)  B=0.923  — also top KIE-reducing residue
+
+─────────────────────────────────────────────────────────────────
+  N189A — KNOWN TUNNELLING MUTATION (Pudney et al. JACS 2007)
+─────────────────────────────────────────────────────────────────
+  Predicted KIE:  12.68  [ABOVE WT ✓]
+  Mechanism:      dynamic  (Δstat=-0.065, Δdyn=-0.229)
+  Literature:     elevated, multiphasic KIEs (above WT)
+  Direction:      CORRECT — model identifies N189A as tunnelling-relevant
+
+─────────────────────────────────────────────────────────────────
+  TOP 10 NOVEL PREDICTIONS (all novel — no MR KIE data published)
+─────────────────────────────────────────────────────────────────
+  Mutation         KIE    vsWT   Δstat   Δdyn  Mechanism   Conf
+  ─────────────────────────────────────────────────────────────────
+  A190G          147.5  +3.57x  +1.27 +0.18  mixed       0.451
+  L248G          147.5  +3.57x  +1.27 +0.09  static      0.567
+  N194G          147.5  +3.57x  +1.27 -0.14  static      0.511
+  A187G          147.5  +3.57x  +0.78 +0.17  mixed       0.211
+  A188G          147.5  +3.57x  +1.27 +0.12  static      0.416
+  P193A          147.5  +3.57x  +0.02 +0.34  dynamic     0.102
+  P193G          147.5  +3.57x  +0.97 +0.45  dynamic     0.362
+  A131G          147.5  +3.57x  +1.27 +0.07  static      0.271
+  A198G          147.5  +3.57x  +1.27 +0.20  mixed       0.179
+  F246G          147.5  +3.57x  +1.27 +0.37  mixed       0.189
+
+─────────────────────────────────────────────────────────────────
+  TOP 5 REDUCING MUTATIONS (negative controls)
+─────────────────────────────────────────────────────────────────
+  S60G         KIE=  3.2  dynamic
+  E132A        KIE=  3.2  dynamic
+  T240V        KIE=  4.4  dynamic
+  S60A         KIE=  4.8  dynamic
+  Y271F        KIE=  5.0  dynamic
+
+─────────────────────────────────────────────────────────────────
+  TOP REWIRING MUTATIONS (increase spectral gap λ₂)
+─────────────────────────────────────────────────────────────────
+  G262V  Δλ₂=+0.0027  G262S  Δλ₂=+0.0019  A261V  Δλ₂=+0.0017
+
+█████████████████████████████████████████████████████████████████
+  END OF REPORT
+█████████████████████████████████████████████████████████████████
+  TunnelScan v0.1 — zero-parameter transfer (AADH BETA=5.0)
+  No MR-specific calibration. Direction test only.
+  Novel predictions require experimental validation.

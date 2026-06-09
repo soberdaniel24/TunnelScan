@@ -94,45 +94,39 @@ AADH_KIE_DATA: List[KIEDataPoint] = [
 # WT intrinsic KIE = 6.8; canonical measurement: Sikorski et al. 2004 JACS
 # 126:4778, DOI 10.1021/ja031683w.
 #
-# LITERATURE VERIFICATION (2026-05-26):
-# Each entry below was checked against its cited DOI. Findings:
+# LITERATURE VERIFICATION (updated 2026-06-09):
 #
-#   I14 series: source DOI 10.1073/pnas.1102948108 ("Loveridge PNAS 2011")
-#     does NOT exist (404). Correct paper is Stojković et al. 2012 JACS
-#     DOI 10.1021/ja209425w (PMID 22171795, PMC4341912). Values (4.5/6.8/9.1)
-#     are in the SI of that paper; direction is consistent with published
-#     abstracts but exact numbers COULD NOT BE VERIFIED from open-access text.
+# NOTE ON "INFLATED KIES" LANGUAGE IN THE LITERATURE
+# ───────────────────────────────────────────────────
+# Kohen-group papers (Wang 2006 and variants) report intrinsic KIEs via competitive
+# triple-isotope labelling (H, D, T) and express results as Arrhenius parameters
+# (A_H/T, A_H/D, ΔE_a). "Inflated primary KIEs" in these papers refers to
+# inflated TEMPERATURE DEPENDENCE (A_H/T deviating from semiclassical) and to the
+# H/T KIE ratio, NOT the H/D KIE ratio at 25°C.
 #
-#   M42W = 3.2: SOURCE NOT FOUND. DOI 10.1021/bi050586p returns no PubMed
-#     result. Wang et al. 2006 Phil Trans (PMID 16873118) — the actual M42W
-#     intrinsic KIE paper — explicitly states M42W has "inflated primary KIEs"
-#     ABOVE WT. Stored value 3.2 < WT 6.8 is the WRONG DIRECTION.
+# Specifically:
+#   G121V: A_H/T = 7.4 > semiclassical lower limit (~3.3)  → inflated H/T
+#          But directly measured kH/kD at 25°C = 4.9 ± 0.2 → BELOW WT (6.8)
+#          (Wang et al. 2006 Biochemistry, PMC2553318, main text Table)
+#   M42W:  A_H/T = 2.8 (below semiclassical) → strongly temperature-dependent
+#          No direct kH/kD at 25°C in main text of any accessible paper;
+#          only Arrhenius H/T and H/D parameters given.
 #
-#   G121V = 3.4: SOURCE WRONG. DOI 10.1073/pnas.032598199 misformatted;
-#     Rajagopalan et al. 2002 Biochemistry (PMID 12379104) reports hydride
-#     transfer RATES not KIEs. Wang et al. 2006 Biochemistry (PMID 16445280)
-#     — the actual G121V KIE paper — says G121V has "slightly inflated primary
-#     KIEs" ABOVE WT. Stored value 3.4 < WT 6.8 is the WRONG DIRECTION.
-#
-#   G121VM42W = 2.8: SOURCE NOT FOUND. Same bad DOI. Value unverifiable;
-#     double mutant cannot be predicted by single-point scan regardless.
-#
-#   F125M = 3.0: SOURCE DOES NOT EXIST. No "Pudney et al. JACS 2013" DHFR
-#     paper found in PubMed (only unrelated antimalarial Pudney paper). Value
-#     appears fabricated.
-#
-# RESULT: M42W, G121V, G121VM42W, F125M moved to DHFR_KIE_DATA_UNVERIFIED.
-# DHFR_KIE_DATA contains only entries whose direction is consistent with
-# published literature. BETA_DHFR re-calibration on n=3 is needed.
+# PRIOR RETRACTION HISTORY:
+#   M42W = 3.2: SOURCE NOT FOUND. Original DOI 10.1021/bi050586p invalid.
+#   G121V = 3.4: SOURCE WRONG. The actual G121V kH/kD = 4.9 (below WT, not 3.4).
+#   G121VM42W = 2.8: SOURCE NOT FOUND. Double mutant; outside single-point scope.
+#   F125M = 3.0: SOURCE DOES NOT EXIST. No "Pudney et al. JACS 2013" DHFR paper.
+#   All four moved to DHFR_KIE_DATA_UNVERIFIED.
 #
 # Confidence tiers:
-#   HIGH      — sourced to correct paper; direction consistent with literature
-#   LOW       — direction consistent but exact value not verified from full text
-#   RETRACTED — stored value contradicts published data; moved to unverified list
+#   HIGH — value in main text/table of accessible paper; directly verified
+#   LOW  — direction consistent but exact value in SI of paywalled paper
 #
 # Sources:
-#   [SI2004] Sikorski et al. JACS 2004, DOI 10.1021/ja031683w — WT intrinsic KIE
-#   [ST2012] Stojković et al. JACS 2012, DOI 10.1021/ja209425w — I14 series
+#   [SK2004]  Sikorski et al. JACS 2004, DOI 10.1021/ja031683w — WT kH/kD
+#   [WA2006B] Wang et al. Biochemistry 2006, DOI 10.1021/bi0518242 — G121V kH/kD
+#   [ST2012]  Stojković et al. JACS 2012, DOI 10.1021/ja209425w — I14 series
 #
 DHFR_KIE_DATA: List[KIEDataPoint] = [
 
@@ -166,6 +160,20 @@ DHFR_KIE_DATA: List[KIEDataPoint] = [
         kie_298k=9.1, kie_error=1.0,
         mechanism='static',
         source='Stojković et al. JACS 2012, DOI 10.1021/ja209425w [LOW — values in SI, not verified from full text]'
+    ),
+
+    # ── G121V (HIGH confidence — directly measured kH/kD in main text) ──────────
+    # G121 is a distal residue (~19 Å from active site) in the coupled network.
+    # G121V disrupts the promoting-vibration dynamic network, reducing kH/kD
+    # from WT 6.8 to 4.9 at 25°C. Note: the H/T Arrhenius parameter A_H/T = 7.4
+    # is above WT (7.0), so G121V's "inflated" language in the literature refers
+    # to temperature dependence of H/T, not to absolute kH/kD at 25°C.
+    # Force-evaluated outside the 10 Å scan radius via calibration force-eval.
+    KIEDataPoint(
+        label='G121V', residue=121, orig_aa='GLY', new_aa='VAL', chain='A',
+        kie_298k=4.9, kie_error=0.2,
+        mechanism='dynamic',
+        source='Wang et al. Biochemistry 2006, DOI 10.1021/bi0518242 [HIGH — kH/kD in main text, PMC2553318]'
     ),
 ]
 

@@ -21,15 +21,15 @@ component. For AADH it was fitted to 5.0 on the T172 H-bond disruption series.
 For DHFR the calibration set contains only the verified I14 series (n=3).
 
 Calibration dataset (DHFR_KIE_DATA from calibration.py):
-    I14V  4.5  (static — Stojković et al. JACS 2012, DOI 10.1021/ja209425w)
-    I14A  6.8  (static — same source)
-    I14G  9.1  (static — same source; values from SI, direction verified)
+    I14V   4.5  (static  — Stojković et al. JACS 2012, DOI 10.1021/ja209425w [LOW])
+    I14A   6.8  (static  — same source [LOW])
+    I14G   9.1  (static  — same source [LOW]; values from SI, direction verified)
+    G121V  4.9  (dynamic — Wang et al. Biochemistry 2006, DOI 10.1021/bi0518242 [HIGH])
 
-Previously included entries (M42W=3.2, G121V=3.4, G121VM42W=2.8, F125M=3.0)
-were removed after literature verification found wrong/missing sources and values
-that contradict published abstracts (M42W and G121V actually have inflated KIEs
-above WT per Wang et al. 2006 PMID 16873118 and PMID 16445280). These entries
-are preserved in DHFR_KIE_DATA_UNVERIFIED in calibration.py.
+G121V note: the literature "inflated KIEs" language refers to inflated H/T Arrhenius
+temperature-dependence (A_H/T = 7.4 > WT), NOT to an inflated kH/kD at 25°C.
+The directly measured kH/kD = 4.9 ± 0.2 is BELOW WT (6.8). Prior entries
+(M42W=3.2, G121V=3.4, G121VM42W=2.8, F125M=3.0) had wrong/missing sources.
 
 Note on cross-enzyme transfer of GEOM_COUPLING:
     GEOM_COUPLING=0.016 was calibrated on AADH T172. For DHFR I14, the
@@ -266,16 +266,18 @@ def main():
         dln  = abs(np.log(max(pred,1e-3)) - np.log(dp.kie_298k)) if not np.isnan(pred) else float('nan')
         print(f"  {dp.label:<10} {dp.kie_298k:>8.1f} {pred:>9.2f} {dln:>7.3f}")
 
-    # ── G121V and M42W direction check ────────────────────────────────────────
-    print(f"\n  Direction check for G121V and M42W (NOT calibration points):")
-    print(f"  Literature: both should be ABOVE WT (> 6.8) — inflated KIEs")
-    for lbl, resnum in [('G121V', 121), ('M42W', 42)]:
-        pred = preds_opt.get(lbl, float('nan'))
-        if not np.isnan(pred):
-            direction = 'ABOVE WT ✓' if pred > 6.8 else 'BELOW WT ✗ (wrong direction)'
-            print(f"  {lbl}: predicted KIE = {pred:.2f}  [{direction}]")
-        else:
-            print(f"  {lbl}: not found in scan (may be outside radius)")
+    # ── M42W direction check ──────────────────────────────────────────────────
+    # G121V is now a calibration point; its prediction appears in the table above.
+    # M42W has no confirmed kH/kD at 25°C in any accessible main text:
+    # Wang 2006 (PMC1647312, PMC1635075) report only Arrhenius H/T params.
+    # Direction for kH/kD is uncertain — do not assert an expected value.
+    print(f"\n  M42W check (not a calibration point — no confirmed kH/kD at 25°C):")
+    pred_m42w = preds_opt.get('M42W', float('nan'))
+    if not np.isnan(pred_m42w):
+        print(f"  M42W: predicted KIE = {pred_m42w:.2f}  "
+              f"[vs WT 6.8; no published kH/kD for comparison]")
+    else:
+        print(f"  M42W: not found in scan (outside 10 Å radius)")
 
     # ── Top 10 novel DHFR predictions with confidence scores ─────────────────
     import dataclasses

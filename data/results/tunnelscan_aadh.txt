@@ -2,12 +2,12 @@
 █████████████████████████████████████████████████████████████████
   TUNNELSCAN REPORT
 █████████████████████████████████████████████████████████████████
-  Generated: 2026-05-26 18:07
+  Generated: 2026-06-03 15:05
   Enzyme:    AADH (Alcaligenes faecalis) + tryptamine
   PDB:       2AGW
   Residues scanned:      74
-  Mutations predicted:   291
-  Novel predictions:     287
+  Mutations predicted:   303
+  Novel predictions:     299
   WT KIE (predicted):    36.4
   WT KIE (experimental): 55.0
   Calibration R²:        0.948  (on 4 published mutants)
@@ -47,10 +47,10 @@
   F343A        91.7  +2.52x  +0.20 +0.21  dynamic          0.12  HIGH★
   F343G        91.7  +2.52x  +0.92 +0.35  dynamic          0.32  HIGH★
   F343S        91.7  +2.52x  +0.26 +0.14  dynamic          0.10  HIGH★
+  F343M        91.7  +2.52x  +0.28 +0.14  dynamic          0.10  HIGH★
   L394G        91.7  +2.52x  +0.92 +0.24  mixed            0.19  HIGH★
   A379G        91.7  +2.52x  +0.92 +0.13  mixed            0.18  HIGH★
   L380G        91.7  +2.52x  +0.92 +0.24  mixed            0.18  HIGH★
-  V158G        91.7  +2.52x  -0.22 +0.21  dynamic          0.10  HIGH★
 
   ◆ Notable novel mutations predicted to reduce tunnelling:
     (These confirm the dynamic model — useful as negative controls)
@@ -71,8 +71,8 @@
   SECTION 3 — Mechanism Analysis
 ─────────────────────────────────────────────────────────────────
   Static-dominated mutations:  10
-  Dynamic-dominated mutations: 238
-  Mixed-mechanism mutations:   40
+  Dynamic-dominated mutations: 249
+  Mixed-mechanism mutations:   41
 
   Best static-only enhancers (safest to test — no dynamic risk):
     L76V       KIE=50.8  D-A compression=-0.014Å  conf=0.09
@@ -102,6 +102,7 @@
   F343A        91.7  +2.52x  +0.20 +0.21  dynamic     0.47  0.12      ★        -
   F343G        91.7  +2.52x  +0.92 +0.35  dynamic     0.47  0.32      ★        -
   F343S        91.7  +2.52x  +0.26 +0.14  dynamic     0.47  0.10      ★        -
+  F343M        91.7  +2.52x  +0.28 +0.14  dynamic     0.47  0.10      ★        -
   L394G        91.7  +2.52x  +0.92 +0.24  mixed       0.39  0.19      ★        -
   A379G        91.7  +2.52x  +0.92 +0.13  mixed       0.44  0.18      ★        -
   L380G        91.7  +2.52x  +0.92 +0.24  mixed       0.40  0.18      ★        -
@@ -129,6 +130,7 @@
   L411G        91.7  +2.52x  +0.92 +0.33  dynamic     0.55  0.17      ★        -
   V399G        91.7  +2.52x  +0.92 +0.27  mixed       0.44  0.10      ★        -
   L330G        91.7  +2.52x  +0.91 +0.24  mixed       0.40  0.10      ★        -
+  F169M        91.7  +2.52x  +0.23 +0.11  dynamic     0.38  0.09      ★        -
   F343L        91.7  +2.52x  +0.48 +0.07  mixed       0.47  0.08      ★        -
   L392A        91.7  +2.52x  +0.04 +0.14  dynamic     0.46  0.05      ★        -
   S381G        91.7  +2.52x  +0.92 -0.30  mixed       0.38  0.50      ★        -
@@ -163,6 +165,7 @@
   I360V        48.0  +1.32x  -0.12 +0.08  dynamic     0.50  0.05      ★        -
   F343I        48.0  +1.32x  +0.28 +0.00  static      0.47  0.06      ★        -
   I404V        46.6  +1.28x  -0.16 +0.08  dynamic     0.55  0.07      ★        -
+  F97M         45.7  +1.26x  -0.35 +0.09  mixed       0.29  0.05      ★        -
   F97S         45.4  +1.25x  -0.36 +0.09  mixed       0.29  0.05      ★        -
   L390V        43.4  +1.19x  +0.19 +0.00  static      0.52  0.04      ★        -
   Y341S        42.8  +1.18x  +0.39 -0.07  mixed       0.52  0.05      ★        -
@@ -291,6 +294,7 @@
   Q406E        13.9  +0.38x  +0.10 -0.21  dynamic     0.66  0.07      ★        -
   M391V        13.2  +0.36x  -0.42 -0.07  mixed       0.49  0.13      ★        -
   N329T        13.0  +0.36x  -0.46 -0.11  mixed       0.35  0.08      ★        -
+  M162W        12.9  +0.36x  +0.01 -0.16  dynamic     0.35  0.03      ★        -
   Q424A        12.9  +0.35x  +0.01 -0.24  dynamic     0.30  0.04      ★        -
   S95A         12.8  +0.35x  +0.00 -0.24  dynamic     0.30  0.04      ★        -
   G79A         12.8  +0.35x  +0.14 -0.14  dynamic     0.46  0.05      ★        -
@@ -323,6 +327,7 @@
   N156G         9.0  +0.25x  +0.01 -0.32  dynamic     0.40  0.05      ★        -
   Y181L         8.8  +0.24x  -0.22 -0.26  dynamic     0.33  0.09      ★        -
   G178S         8.8  +0.24x  +0.49 -0.15  mixed       0.32  0.10      ★        -
+  M382W         8.8  +0.24x  -0.02 -0.18  dynamic     0.39  0.09      ★        -
   N164A         8.7  +0.24x  -0.15 -0.32  dynamic     0.40  0.10      ★        -
   H155F         8.6  +0.24x  +0.21 -0.33  dynamic     0.41  0.07      ★        -
   K410A         8.6  +0.24x  +0.92 -0.49  dynamic     0.61  0.42      ★        -
@@ -347,11 +352,13 @@
   Y341F         6.6  +0.18x  +0.36 -0.41  dynamic     0.52  0.12      ★        -
   T172A         6.5  +0.18x  +0.11 -0.39  dynamic     0.49  0.10               7
   Y341V         6.3  +0.17x  +0.31 -0.41  dynamic     0.52  0.11      ★        -
+  G178V         6.1  +0.17x  +0.50 -0.19  dynamic     0.32  0.15      ★        -
   T103V         6.1  +0.17x  -0.12 -0.32  dynamic     0.40  0.08      ★        -
   G79S          6.1  +0.17x  +0.18 -0.21  dynamic     0.46  0.06      ★        -
   N400A         6.1  +0.17x  -0.05 -0.38  dynamic     0.47  0.06      ★        -
   C129A         6.0  +0.17x  -0.12 -0.37  dynamic     0.46  0.10      ★        -
   C98A          5.9  +0.16x  +0.17 -0.42  dynamic     0.53  0.11      ★        -
+  M391W         5.8  +0.16x  -0.14 -0.22  dynamic     0.49  0.19      ★        -
   T393V         5.7  +0.16x  -0.01 -0.35  dynamic     0.43  0.11      ★        -
   H127F         5.7  +0.16x  +0.05 -0.38  dynamic     0.48  0.08      ★        -
   H127A         5.6  +0.15x  -0.12 -0.38  dynamic     0.48  0.09      ★        -
@@ -360,18 +367,23 @@
   Y328V         5.1  +0.14x  -0.45 -0.29  dynamic     0.37  0.21      ★        -
   N164G         5.0  +0.14x  -0.92 -0.32  dynamic     0.40  0.26      ★        -
   T172V         5.0  +0.14x  +0.06 -0.39  dynamic     0.49  0.09               5
+  G78V          4.8  +0.13x  +0.53 -0.26  dynamic     0.44  0.17      ★        -
   T77A          4.7  +0.13x  -0.06 -0.45  dynamic     0.56  0.11      ★        -
   N159G         4.7  +0.13x  -0.92 -0.30  dynamic     0.37  0.29      ★        -
   S405A         4.5  +0.13x  +0.13 -0.47  dynamic     0.59  0.14      ★        -
+  G396V         4.5  +0.12x  +0.18 -0.22  dynamic     0.37  0.06      ★        -
   Y402A         4.3  +0.12x  -0.32 -0.43  dynamic     0.53  0.21      ★        -
   S102G         4.3  +0.12x  -0.86 -0.32  dynamic     0.40  0.16      ★        -
   T77V          4.2  +0.12x  +0.11 -0.45  dynamic     0.56  0.10      ★        -
   T173V         4.2  +0.12x  -0.01 -0.42  dynamic     0.53  0.07      ★        -
+  G327V         4.2  +0.11x  +0.28 -0.25  dynamic     0.42  0.09      ★        -
   Q406A         4.2  +0.11x  +0.40 -0.53  dynamic     0.66  0.21      ★        -
+  G85V          3.9  +0.11x  +0.30 -0.26  dynamic     0.43  0.09      ★        -
   T103G         3.7  +0.10x  -0.92 -0.32  dynamic     0.40  0.23      ★        -
   S105G         3.5  +0.10x  -0.92 -0.35  dynamic     0.44  0.43      ★        -
   S108G         3.4  +0.09x  -0.92 -0.35  dynamic     0.44  0.19      ★        -
   Y402V         3.4  +0.09x  -0.18 -0.43  dynamic     0.53  0.16      ★        -
+  G79V          3.4  +0.09x  +0.19 -0.28  dynamic     0.46  0.06      ★        -
   Y402L         3.0  +0.08x  -0.44 -0.43  dynamic     0.53  0.22      ★        -
   Y402F         2.9  +0.08x  -0.40 -0.43  dynamic     0.53  0.20      ★        -
   T173G         2.7  +0.07x  -0.92 -0.42  dynamic     0.53  0.24      ★        -
@@ -381,6 +393,6 @@
 █████████████████████████████████████████████████████████████████
   END OF REPORT
 █████████████████████████████████████████████████████████████████
-  TunnelScan v0.1 | 2026-05-26 18:07
+  TunnelScan v0.1 | 2026-06-03 15:05
   Bell correction model. For quantitative accuracy, use PIMD (CP2K).
   Novel predictions require experimental validation.
