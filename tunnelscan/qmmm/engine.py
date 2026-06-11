@@ -20,11 +20,13 @@ except ImportError:
 
 
 class QMMMEngine:
-    def __init__(self, atoms, qm_region, temperature: float = 300.0, use_gpu: bool = False):
+    def __init__(self, atoms, qm_region, temperature: float = 300.0, use_gpu: bool = False,
+                 qm_charge: int = 0):
         self.atoms = atoms.copy()
         self.qm_region = qm_region
         self.temperature = temperature
         self.use_gpu = use_gpu
+        self.qm_charge = qm_charge  # formal charge of QM region (e.g. -1 for Asp carboxylate)
         self._setup_qm()
         self._setup_mm()
 
@@ -72,7 +74,7 @@ class QMMMEngine:
             sub2 = sub
 
         if self._qm_method == "gfn2":
-            calc = TBLite(method="GFN2-xTB")
+            calc = TBLite(method="GFN2-xTB", charge=self.qm_charge)
         else:
             from ase.calculators.emt import EMT
             calc = EMT()
