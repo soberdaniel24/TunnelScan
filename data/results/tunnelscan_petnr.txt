@@ -1,0 +1,140 @@
+█████████████████████████████████████████████████████████████████
+  TUNNELSCAN REPORT — PETNR (Enterobacter cloacae)
+█████████████████████████████████████████████████████████████████
+  Generated: 2026-06-30 21:26
+  Enzyme:    PETNR (Pentaerythritol Tetranitrate Reductase)
+  PDB:       3KFT (TH-NADH complex, 2.10 Å)
+  BETA:      5.0 (AADH-calibrated; zero-parameter transfer test)
+  Residues scanned:    53
+  Mutations predicted: 213
+  Novel predictions:   213
+
+─────────────────────────────────────────────────────────────────
+  ACTIVE SITE
+─────────────────────────────────────────────────────────────────
+  D-A pair: C4N(TH-NADH res 366) → N5(FMN res 365)
+  Transfer: NADPH C4H → FMN N5 (hydride, OYE mechanism)
+  D-A distance (crystal): 3.793 Å  (capped to 3.5 Å for Bell)
+  Donor in structure: 1,4,5,6-tetrahydro-NADH (actual substrate analog)
+
+─────────────────────────────────────────────────────────────────
+  WT KIE
+─────────────────────────────────────────────────────────────────
+  Bell predicted (uncorrected):  41.4
+  Experimental (override):        7.0  (NADPH; Pudney 2013 JACS 10.1021/ja312593d / Hay 2026 Table 1)
+  NOTE: use_exp_kie_override=True forces model baseline = exp.
+        WT "prediction" = 7.0 by construction, NOT a genuine test.
+        Bell=41.4 is consistent with MR (also 41.4) — both are OYE C→N
+        hydride transfers with the same imaginary freq=1200 cm⁻¹.
+
+─────────────────────────────────────────────────────────────────
+  NETWORK TOPOLOGY
+─────────────────────────────────────────────────────────────────
+  Nodes (D-A network):  183
+  λ₂ (Fiedler gap):     0.0010
+  Ω (robustness):       0.0005
+  Top betweenness residues:
+    SER108 (A)  B=1.000
+    GLY353 (A)  B=0.909
+    VAL143 (A)  B=0.902
+    PRO37 (A)  B=0.809
+    ARG346 (A)  B=0.734
+    HIS184 (A)  B=0.521
+    TYR303 (A)  B=0.497
+    ALA140 (A)  B=0.371
+
+  Longbotham 2016 JACS: protein AND FMN cofactor modes both contribute.
+  Check: FMN-adjacent residues in top betweenness?
+  No FMN-adjacent residues in top 8 betweenness (cofactor modes may not be
+  captured by protein-only ENM — consistent with Longbotham 2016 finding).
+
+─────────────────────────────────────────────────────────────────
+  KNOWN MUTANT DIRECTION CHECK
+─────────────────────────────────────────────────────────────────
+  Pudney 2013 JACS (10.1021/ja312593d): HEAVY ENZYME study only.
+  All non-exchangeable atoms replaced with 13C/15N/2H isotopes.
+  → No amino acid mutations in this paper. Direction check N/A.
+
+  Hay 2018 Biochem (PMID 31119061): second-sphere mutants
+  L25I, L25A, I107L, I107A (NADPH half-reaction studied).
+  L25 is 3.5 Å from FMN N5 (nearest protein residue to acceptor).
+  L25 predictions from scan:
+    L25A       KIE=  14.7  breathing
+    L25G       KIE=  10.2  mixed
+    L25I       KIE=   7.3  static
+    L25V       KIE=   6.1  breathing
+  I107 predictions from scan:
+    I107A      KIE=  15.4  dynamic
+    I107G      KIE=  23.8  mixed
+    I107L      KIE=   9.0  dynamic
+    I107V      KIE=   8.6  dynamic
+
+  Note: experimental KIE values for L25x/I107x not available in
+  open-access main text — direction comparison requires full text access.
+
+─────────────────────────────────────────────────────────────────
+  TOP 10 NOVEL PREDICTIONS (all novel — no PETNR mutation KIE data in scan)
+─────────────────────────────────────────────────────────────────
+  Mutation       KIE    vsWT   Δstat   Δdyn  Mechanism     Conf
+  ───────────────────────────────────────────────────────────────
+  M22A          23.8  +3.40x  +0.29 +0.08  breathing    0.289
+  I54A          23.8  +3.40x  -0.15 +0.25  dynamic      0.147
+  I54G          23.8  +3.40x  -1.23 +0.42  dynamic      0.441
+  I107G         23.8  +3.40x  +1.23 +0.18  mixed        0.276
+  P24A          23.8  +3.40x  -0.10 +0.26  dynamic      0.133
+  P24G          23.8  +3.40x  -1.23 +0.35  mixed        0.272
+  A127G         23.8  +3.40x  +1.23 +0.13  static       0.362
+  P17A          23.8  +3.40x  +0.12 +0.23  dynamic      0.074
+  I55A          23.8  +3.40x  +0.00 +0.25  dynamic      0.055
+  I327A         23.8  +3.40x  +0.14 +0.21  dynamic      0.056
+
+─────────────────────────────────────────────────────────────────
+  TOP 5 REDUCING MUTATIONS (negative controls)
+─────────────────────────────────────────────────────────────────
+  N242A        KIE=  1.0  dynamic
+  S56G         KIE=  1.0  dynamic
+  W102A        KIE=  1.0  dynamic
+  W102L        KIE=  1.0  dynamic
+  W102F        KIE=  1.0  dynamic
+
+─────────────────────────────────────────────────────────────────
+  TOP REWIRING MUTATIONS (increase spectral gap λ₂)
+─────────────────────────────────────────────────────────────────
+  G353V  Δλ₂=+0.0000
+  G357V  Δλ₂=+0.0000
+  G354V  Δλ₂=+0.0000
+  G353S  Δλ₂=+0.0000
+  G357S  Δλ₂=+0.0000
+
+█████████████████████████████████████████████████████████████████
+  VERDICT: SECOND CROSS-VALIDATION
+█████████████████████████████████████████████████████████████████
+  WT KIE: Bell=41.4 (raw); exp override=7.0 (Pudney 2013 / Hay 2026)
+    → WT "pass" is NOT a genuine prediction (exp override forces pred=exp).
+    Same Bell overshoot pattern as MR (also 41.4): both OYE C→N hydride.
+
+  Mutant direction check: UNAVAILABLE from Pudney 2013 (heavy enzyme study)
+    Hay 2018 (PMID 31119061) L25/I107 predictions made but not verified:
+      L25A pred=14.7 (↑), L25I pred=7.3 (≈WT), L25V pred=6.1 (↓)
+      I107A pred=15.4 (↑), I107G pred=23.8 (↑), I107L pred=9.0 (↑)
+    Experimental KIE values require full-text access to Hay 2018.
+
+  Control check — W102 (conserved OYE essential Trp, substrate stacker):
+    W102A pred=1.0 (↓↓), W102L pred=1.0 (↓↓), W102F pred=1.0 (↓↓) ✓
+    Correct direction: W102 mutations are known to disrupt substrate binding.
+
+  Network: HIS184 (conserved OYE catalytic His) B=0.521 appears in top
+    betweenness — model correctly identifies catalytic residue as a network
+    bottleneck. FMN-adjacent residues (L25, T26) are most D-A-coupled
+    (resistance map: T26 R=0, L25 R=1.99).
+
+  VERDICT: NOT CITABLE AS SECOND CROSS-VALIDATION WITHOUT Hay 2018 KIEs.
+  Cannot claim directional accuracy. Citable claims:
+    (a) W102A/L/F correctly identified as strong KIE-reducers.
+    (b) HIS184 appears as a network bottleneck (consistent with known role).
+    (c) L25/I107 predictions made; experimental comparison pending.
+  Do NOT cite as a second zero-parameter cross-validation in the Scrutton
+  email until Hay 2018 direction is confirmed for L25A or I107A.
+█████████████████████████████████████████████████████████████████
+  TunnelScan v0.1 — zero-parameter transfer (AADH BETA=5.0)
+  No PETNR-specific calibration.

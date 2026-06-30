@@ -227,7 +227,35 @@ ATA117 = EnzymeProfile(
     ),
 )
 
-ALL_ENZYMES = [AADH, MADH, MR, HTADH, DHFR, SLO, ATA117]
+PETNR = EnzymeProfile(
+    name="Pentaerythritol Tetranitrate Reductase (Enterobacter cloacae)",
+    pdb_id="3KFT",
+    organism="Enterobacter cloacae",
+    reaction_type="hydride_transfer",
+    donor_atom_element="C",
+    acceptor_atom_element="N",          # FMN N5
+    da_reduced_mass_u=6.462,            # C-N pair: 12*14/26
+    promoting_vibration_cm1=70.0,       # OYE family — same as MR; Longbotham 2016 JACS
+    promoting_vibration_reference="10.1021/ja312593d",   # Pudney 2013 JACS
+    cofactor="FMN",
+    kie_wt_experimental=7.0,            # NADPH, Table 1 Hay 2026; Pudney 2013 JACS
+    kie_wt_uncertainty=0.5,
+    kie_reference="10.1021/ja312593d",  # Pudney 2013 JACS
+    commercial_relevance=(
+        "Old Yellow Enzyme family, ene-reductase, used in industrial asymmetric synthesis"
+    ),
+    notes=(
+        "3KFT is a complex with 1,4,5,6-tetrahydro-NADH (TH-NADH); actual D-A pair "
+        "C4N(NAD 366) → N5(FMN 365) measured directly at 3.793 Å. "
+        "His181 and His184 are conserved OYE catalytic histidines. "
+        "Pudney 2013 JACS (10.1021/ja312593d) is a heavy-enzyme isotope study — "
+        "no amino acid mutations; KIE~7.0 reported for light PETNR + NADPH. "
+        "Longbotham 2016 JACS (PMID 27676389): both protein AND FMN cofactor modes "
+        "contribute to the enzyme isotope effect (contributions not additive)."
+    ),
+)
+
+ALL_ENZYMES = [AADH, MADH, MR, HTADH, DHFR, SLO, ATA117, PETNR]
 
 
 class PhysicalCeilingViolation(Exception):

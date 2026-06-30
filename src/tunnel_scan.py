@@ -277,6 +277,27 @@ htADH_CONFIG = ActiveSiteConfig(
     da_reduced_mass_u=6.000,
 )
 
+PETNR_CONFIG = ActiveSiteConfig(
+    name='PETNR (Enterobacter cloacae)',
+    pdb_id='3KFT',
+    # 3KFT: PETNR complex with 1,4,5,6-tetrahydro-NADH (TH-NADH).
+    # Actual hydride donor: nicotinamide C4N of TH-NADH (HETATM chain A res 366).
+    # Actual hydride acceptor: FMN N5 (HETATM chain A res 365).
+    # D-A distance from crystal: 3.793 Å (capped to 3.5 for Bell correction).
+    # OYE mechanism: NADPH C4H → FMN N5 (same as MR but with substrate analog present).
+    donor=('A', 366, 'C4N'),
+    acceptor=('A', 365, 'N5'),
+    barrier_height_kcal=13.0,
+    imaginary_freq_cm1=1200.0,          # C→N hydride transfer, same as MR
+    # His181, His184: conserved OYE catalytic histidines — do not mutate
+    catalytic_residues=[('A', 181), ('A', 184)],
+    scan_radius=8.0,
+    wt_kie_exp=7.0,                     # NADPH; Pudney 2013 JACS / Hay 2026 Table 1
+    use_exp_kie_override=True,          # Bell overshoots C→N at imaginary_freq=1200
+    promoting_vibration_cm1=70.0,       # OYE family (Longbotham 2016 JACS PMID 27676389)
+    da_reduced_mass_u=6.462,            # C-N: 12*14/26
+)
+
 ATA117_CONFIG = ActiveSiteConfig(
     name='ATA-117 (R)-selective omega-TA (Arthrobacter citreus)',
     # Structural proxy: 3WWH from Arthrobacter sp. KNK168 — the closest available
